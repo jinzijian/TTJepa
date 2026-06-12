@@ -44,13 +44,56 @@ class JEPA(nn.Module):
 
         return info
 
-    def predict(self, emb, act_emb):
+    def predict(
+        self,
+        emb,
+        act_emb,
+        return_all=False,
+        predictor_depth=None,
+        halt_mode="none",
+        halt_eps=None,
+        min_depth=1,
+    ):
         """Predict next state embedding
         emb: (B, T, D)
         act_emb: (B, T, A_emb)
         """
-        preds = self.predictor(emb, act_emb)
-        preds = self.pred_proj(rearrange(preds, "b t d -> (b t) d"))
+        predictor_kwargs = {}
+        if (
+            return_all
+            or predictor_depth is not None
+            or halt_mode != "none"
+            or halt_eps is not None
+            or min_depth != 1
+        ):
+            predictor_kwargs = {
+                "max_depth": predictor_depth,
+                "return_all": return_all,
+                "halt_mode": halt_mode,
+                "halt_eps": halt_eps,
+                "min_depth": min_depth,
+            }
+
+        try:
+            out = self.predictor(emb, act_emb, **predictor_kwargs)
+        except TypeError as err:
+            if predictor_kwargs:
+                raise TypeError(
+                    "The configured predictor does not support recurrent "
+                    "prediction options."
+                ) from err
+            raise
+
+        if isinstance(out, dict):
+            out = dict(out)
+            preds = out["preds"]
+            K, B, T, _ = preds.shape
+            preds = self.pred_proj(rearrange(preds, "k b t d -> (k b t) d"))
+            out["preds"] = rearrange(preds, "(k b t) d -> k b t d", k=K, b=B, t=T)
+            out["pred"] = out["preds"][-1]
+            return out
+
+        preds = self.pred_proj(rearrange(out, "b t d -> (b t) d"))
         preds = rearrange(preds, "(b t) d -> b t d", b=emb.size(0))
         return preds
 
@@ -58,7 +101,17 @@ class JEPA(nn.Module):
     ## Inference only ##
     ####################
 
-    def rollout(self, info, action_sequence, history_size: int = 3):
+    def rollout(
+        self,
+        info,
+        action_sequence,
+        history_size: int = 3,
+        predictor_depth=None,
+        halt_mode="none",
+        halt_eps=None,
+        min_depth=1,
+        return_depth_stats=False,
+    ):
         """Rollout the model given an initial info dict and action sequence.
         pixels: (B, S, T, C, H, W)
         action_sequence: (B, S, T, action_dim)
@@ -86,11 +139,27 @@ class JEPA(nn.Module):
 
         # rollout predictor autoregressively for n_steps
         HS = history_size
+        depth_used_rollout = []
+        residuals_rollout = []
         for t in range(n_steps):
             act_emb = self.action_encoder(act)
             emb_trunc = emb[:, -HS:]  # (BS, HS, D)
             act_trunc = act_emb[:, -HS:]  # (BS, HS, A_emb)
-            pred_emb = self.predict(emb_trunc, act_trunc)[:, -1:]  # (BS, 1, D)
+            pred = self.predict(
+                emb_trunc,
+                act_trunc,
+                return_all=return_depth_stats,
+                predictor_depth=predictor_depth,
+                halt_mode=halt_mode,
+                halt_eps=halt_eps,
+                min_depth=min_depth,
+            )
+            if return_depth_stats:
+                pred_emb = pred["pred"][:, -1:]  # (BS, 1, D)
+                depth_used_rollout.append(pred["depth_used"][:, -1:])
+                residuals_rollout.append(pred["residuals"][:, :, -1])
+            else:
+                pred_emb = pred[:, -1:]  # (BS, 1, D)
             emb = torch.cat([emb, pred_emb], dim=1)  # (BS, T+1, D)
 
             next_act = act_future[:, t : t + 1, :]  # (BS, 1, action_dim)
@@ -100,12 +169,32 @@ class JEPA(nn.Module):
         act_emb = self.action_encoder(act)  # (BS, T, A_emb)
         emb_trunc = emb[:, -HS:]  # (BS, HS, D)
         act_trunc = act_emb[:, -HS:]  # (BS, HS, A_emb)
-        pred_emb = self.predict(emb_trunc, act_trunc)[:, -1:]  # (BS, 1, D)
+        pred = self.predict(
+            emb_trunc,
+            act_trunc,
+            return_all=return_depth_stats,
+            predictor_depth=predictor_depth,
+            halt_mode=halt_mode,
+            halt_eps=halt_eps,
+            min_depth=min_depth,
+        )
+        if return_depth_stats:
+            pred_emb = pred["pred"][:, -1:]  # (BS, 1, D)
+            depth_used_rollout.append(pred["depth_used"][:, -1:])
+            residuals_rollout.append(pred["residuals"][:, :, -1])
+        else:
+            pred_emb = pred[:, -1:]  # (BS, 1, D)
         emb = torch.cat([emb, pred_emb], dim=1)
 
         # unflatten batch and sample dimensions
         pred_rollout = rearrange(emb, "(b s) ... -> b s ...", b=B, s=S)
         info["predicted_emb"] = pred_rollout
+        if return_depth_stats:
+            depth_used = torch.cat(depth_used_rollout, dim=1)
+            residuals = torch.stack(residuals_rollout, dim=1)
+            residuals = rearrange(residuals, "k t bs -> bs t k")
+            info["depth_used"] = rearrange(depth_used, "(b s) t -> b s t", b=B, s=S)
+            info["residuals"] = rearrange(residuals, "(b s) t k -> b s t k", b=B, s=S)
 
         return info
 
@@ -125,7 +214,7 @@ class JEPA(nn.Module):
 
         return cost
 
-    def get_cost(self, info_dict: dict, action_candidates: torch.Tensor):
+    def get_cost(self, info_dict: dict, action_candidates: torch.Tensor, **rollout_kwargs):
         """ Compute the cost of action candidates given an info dict with goal and initial state."""
 
         assert "goal" in info_dict, "goal not in info_dict"
@@ -146,7 +235,9 @@ class JEPA(nn.Module):
         goal = self.encode(goal)
 
         info_dict["goal_emb"] = goal["emb"]
-        info_dict = self.rollout(info_dict, action_candidates)
+        default_rollout_kwargs = getattr(self, "rollout_kwargs", {})
+        rollout_kwargs = {**default_rollout_kwargs, **rollout_kwargs}
+        info_dict = self.rollout(info_dict, action_candidates, **rollout_kwargs)
 
         cost = self.criterion(info_dict)
         

@@ -116,6 +116,12 @@ def run(cfg: DictConfig):
         model = model.eval()
         model.requires_grad_(False)
         model.interpolate_pos_encoding = True
+        planner_cfg = cfg.get("planner", {})
+        model.rollout_kwargs = (
+            OmegaConf.to_container(planner_cfg, resolve=True)
+            if OmegaConf.is_config(planner_cfg)
+            else dict(planner_cfg)
+        )
         config = swm.PlanConfig(**cfg.plan_config)
         solver = hydra.utils.instantiate(cfg.solver, model=model)
         policy = swm.policy.WorldModelPolicy(

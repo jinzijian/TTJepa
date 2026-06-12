@@ -283,3 +283,172 @@ class ARPredictor(nn.Module):
         x = self.dropout(x)
         x = self.transformer(x, c)
         return x
+
+
+class RecurrentRefineCell(nn.Module):
+    """Shared refinement cell for recurrent next-embedding prediction."""
+
+    def __init__(
+        self,
+        *,
+        hidden_dim,
+        feedback_dim,
+        depth,
+        heads,
+        dim_head,
+        mlp_dim,
+        dropout=0.0,
+    ):
+        super().__init__()
+        self.feedback_proj = nn.Linear(feedback_dim, hidden_dim)
+        self.blocks = nn.ModuleList(
+            [
+                ConditionalBlock(
+                    hidden_dim,
+                    heads=heads,
+                    dim_head=dim_head,
+                    mlp_dim=mlp_dim,
+                    dropout=dropout,
+                )
+                for _ in range(depth)
+            ]
+        )
+
+    def forward(self, h, c, feedback):
+        h = h + self.feedback_proj(feedback)
+        for block in self.blocks:
+            h = block(h, c)
+        return h
+
+
+class RecurrentARPredictor(nn.Module):
+    """Autoregressive predictor with fixed-depth recurrent refinement.
+
+    The default return value is intentionally compatible with ARPredictor:
+    forward(x, c) returns a tensor of shape (B, T, D). Passing return_all=True
+    exposes all recurrent depths for deep supervision and analysis.
+    """
+
+    def __init__(
+        self,
+        *,
+        num_frames,
+        base_depth,
+        refine_depth,
+        max_depth,
+        heads,
+        mlp_dim,
+        input_dim,
+        hidden_dim,
+        output_dim=None,
+        dim_head=64,
+        dropout=0.0,
+        emb_dropout=0.0,
+        residual_scale_init=0.1,
+    ):
+        super().__init__()
+        self.max_depth = max_depth
+        self.output_dim = output_dim or input_dim
+        self.pos_embedding = nn.Parameter(torch.randn(1, num_frames, input_dim))
+        self.dropout = nn.Dropout(emb_dropout)
+
+        self.base_transformer = Transformer(
+            input_dim,
+            hidden_dim,
+            hidden_dim,
+            base_depth,
+            heads,
+            dim_head,
+            mlp_dim,
+            dropout,
+            block_class=ConditionalBlock,
+        )
+        self.cond_proj = (
+            nn.Linear(input_dim, hidden_dim)
+            if input_dim != hidden_dim
+            else nn.Identity()
+        )
+        self.anchor_proj = (
+            nn.Linear(input_dim, self.output_dim)
+            if input_dim != self.output_dim
+            else nn.Identity()
+        )
+        self.init_head = nn.Linear(hidden_dim, self.output_dim)
+        self.refine_cell = RecurrentRefineCell(
+            hidden_dim=hidden_dim,
+            feedback_dim=self.output_dim,
+            depth=refine_depth,
+            heads=heads,
+            dim_head=dim_head,
+            mlp_dim=mlp_dim,
+            dropout=dropout,
+        )
+        self.delta_head = nn.Linear(hidden_dim, self.output_dim)
+        self.gamma_head = nn.Linear(hidden_dim, self.output_dim)
+        self.residual_scale = nn.Parameter(torch.tensor(float(residual_scale_init)))
+
+        nn.init.zeros_(self.delta_head.bias)
+        nn.init.constant_(self.gamma_head.bias, -2.0)
+
+    def forward(
+        self,
+        x,
+        c,
+        max_depth=None,
+        return_all=False,
+        halt_mode="none",
+        halt_eps=None,
+        min_depth=1,
+    ):
+        """
+        x: (B, T, D)
+        c: (B, T, action_emb_dim)
+        """
+        if halt_mode != "none":
+            raise NotImplementedError("adaptive halting is not implemented yet")
+
+        K = int(max_depth or self.max_depth)
+        if K < 1:
+            raise ValueError("max_depth must be >= 1")
+        if min_depth < 1 or min_depth > K:
+            raise ValueError("min_depth must satisfy 1 <= min_depth <= max_depth")
+
+        T = x.size(1)
+        x = x + self.pos_embedding[:, :T]
+        x = self.dropout(x)
+
+        anchor = self.anchor_proj(x)
+        h = self.base_transformer(x, c)
+        c = self.cond_proj(c)
+        z_hat = self.init_head(h)
+
+        preds = []
+        residuals = []
+        prev = z_hat
+
+        for _ in range(K):
+            feedback = z_hat - anchor
+            h = self.refine_cell(h, c, feedback)
+            delta = self.delta_head(h)
+            gamma = torch.sigmoid(self.gamma_head(h))
+            z_hat = z_hat + self.residual_scale * gamma * delta
+
+            residual = (z_hat - prev).pow(2).mean(dim=-1)
+            preds.append(z_hat)
+            residuals.append(residual)
+            prev = z_hat
+
+        if return_all:
+            return {
+                "pred": z_hat,
+                "preds": torch.stack(preds, dim=0),
+                "residuals": torch.stack(residuals, dim=0),
+                "depth_used": torch.full(
+                    x.shape[:2],
+                    fill_value=K,
+                    device=x.device,
+                    dtype=torch.long,
+                ),
+            }
+
+        return z_hat

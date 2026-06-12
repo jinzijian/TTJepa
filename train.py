@@ -33,15 +33,64 @@ def lejepa_forward(self, batch, stage, cfg):
     ctx_act = act_emb[:, : ctx_len]
 
     tgt_emb = emb[:, n_preds:] # label
-    pred_emb = self.model.predict(ctx_emb, ctx_act) # pred
+    recurrent_cfg = cfg.get("recurrent", None)
+    recurrent_enabled = (
+        recurrent_cfg is not None and recurrent_cfg.get("enabled", False)
+    )
+
+    if recurrent_enabled:
+        out_pred = self.model.predict(
+            ctx_emb,
+            ctx_act,
+            return_all=True,
+            predictor_depth=recurrent_cfg.get("max_depth", None),
+        )
+        preds_all = out_pred["preds"]
+        final_target = (
+            tgt_emb
+            if recurrent_cfg.get("final_no_stopgrad", True)
+            else tgt_emb.detach()
+        )
+        final_loss = (preds_all[-1] - final_target).pow(2).mean()
+
+        if preds_all.size(0) > 1:
+            inter_target = (
+                tgt_emb.detach()
+                if recurrent_cfg.get("intermediate_stopgrad", True)
+                else tgt_emb
+            )
+            inter_loss = (preds_all[:-1] - inter_target.unsqueeze(0)).pow(2).mean()
+        else:
+            inter_loss = final_loss.new_zeros(())
+
+        pred_loss = final_loss + recurrent_cfg.get("inter_loss_weight", 0.0) * inter_loss
+        consistency_weight = recurrent_cfg.get("consistency_weight", 0.0)
+        if consistency_weight and preds_all.size(0) > 1:
+            consistency_loss = (preds_all[1:] - preds_all[:-1].detach()).pow(2).mean()
+            pred_loss = pred_loss + consistency_weight * consistency_loss
+        else:
+            consistency_loss = final_loss.new_zeros(())
+
+        output["pred_loss"] = pred_loss
+        output["pred_loss_final"] = final_loss
+        output["pred_loss_inter"] = inter_loss
+        output["pred_loss_consistency"] = consistency_loss
+        if recurrent_cfg.get("log_depth_stats", True):
+            output["residual_mean"] = out_pred["residuals"].detach().mean()
+    else:
+        pred_emb = self.model.predict(ctx_emb, ctx_act) # pred
+        output["pred_loss"] = (pred_emb - tgt_emb).pow(2).mean()
 
     # LeWM loss
-    output["pred_loss"] = (pred_emb - tgt_emb).pow(2).mean()
     output["sigreg_loss"]= self.sigreg(emb.transpose(0, 1))
     output["loss"] = output["pred_loss"] + lambd * output["sigreg_loss"]  
 
-    losses_dict = {f"{stage}/{k}": v.detach() for k, v in output.items() if "loss" in k}
-    self.log_dict(losses_dict, on_step=True, sync_dist=True)
+    metrics_dict = {
+        f"{stage}/{k}": v.detach()
+        for k, v in output.items()
+        if torch.is_tensor(v) and ("loss" in k or k == "residual_mean")
+    }
+    self.log_dict(metrics_dict, on_step=True, sync_dist=True)
     return output
 
 @hydra.main(version_base=None, config_path="./config/train", config_name="lewm")
