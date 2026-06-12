@@ -26,6 +26,11 @@ plan_config:
 eval:
   num_eval: 50
   goal_offset_steps: 25
+  # Paper-style raw timestep goal distance. When set, eval.py converts it
+  # to HDF5 row units using dataset_frameskip and leaves goal_offset_steps
+  # as the backward-compatible row-offset setting.
+  goal_offset_timesteps: null
+  dataset_frameskip: 5
   eval_budget: 50
   img_size: 224
   dataset_name: tworoom

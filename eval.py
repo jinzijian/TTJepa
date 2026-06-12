@@ -46,6 +46,32 @@ def get_dataset(cfg, dataset_name):
     )
     return dataset
 
+
+def resolve_goal_offset_steps(cfg):
+    """Return the dataset-row goal offset used by HDF5Dataset.
+
+    Some paper settings describe goal distance in raw environment timesteps,
+    while the HDF5 datasets store frame-skipped rows. Keep the legacy
+    goal_offset_steps behavior as row units, and add goal_offset_timesteps
+    for paper-style timestep units.
+    """
+    goal_offset_timesteps = cfg.eval.get("goal_offset_timesteps")
+    if goal_offset_timesteps is None:
+        return int(cfg.eval.goal_offset_steps)
+
+    frameskip = int(cfg.eval.get("dataset_frameskip", 1))
+    if frameskip <= 0:
+        raise ValueError("eval.dataset_frameskip must be positive")
+
+    goal_offset_steps = int(np.ceil(float(goal_offset_timesteps) / frameskip))
+    print(
+        f"Resolved goal_offset_timesteps={goal_offset_timesteps} "
+        f"with dataset_frameskip={frameskip} to "
+        f"goal_offset_steps={goal_offset_steps}."
+    )
+    return goal_offset_steps
+
+
 @hydra.main(version_base=None, config_path="./config/eval", config_name="pusht")
 def run(cfg: DictConfig):
     """Run evaluation of dinowm vs random policy."""
@@ -106,8 +132,9 @@ def run(cfg: DictConfig):
     )
 
     # sample the episodes and the starting indices
+    goal_offset_steps = resolve_goal_offset_steps(cfg)
     episode_len = get_episodes_length(dataset, ep_indices)
-    max_start_idx = episode_len - cfg.eval.goal_offset_steps - 1
+    max_start_idx = episode_len - goal_offset_steps - 1
     max_start_idx_dict = {ep_id: max_start_idx[i] for i, ep_id in enumerate(ep_indices)}
     # Map each dataset row’s episode_idx to its max_start_idx
     col_name = "episode_idx" if "episode_idx" in dataset.column_names else "ep_idx"
@@ -144,7 +171,7 @@ def run(cfg: DictConfig):
     metrics = world.evaluate(
         dataset=dataset,
         start_steps=eval_start_idx.tolist(),
-        goal_offset=cfg.eval.goal_offset_steps,
+        goal_offset=goal_offset_steps,
         eval_budget=cfg.eval.eval_budget,
         episodes_idx=eval_episodes.tolist(),
         callables=OmegaConf.to_container(cfg.eval.get("callables"), resolve=True),
