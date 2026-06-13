@@ -98,6 +98,7 @@ Return dict:
     "pred": Tensor,          # (B, T, D)
     "preds": Tensor,         # (K, B, T, D)
     "residuals": Tensor,     # (K, B, T)
+    "continue_logits": Tensor, # (K, B, T)
     "depth_used": Tensor,    # (B, T)
 }
 ```
@@ -115,12 +116,16 @@ feedback = z_hat - x_anchor
 h = refine_cell(h, c, feedback)
 delta = delta_head(h)
 gamma = sigmoid(gamma_head(h))
+continue_logit = continue_head(h)
 z_hat = z_hat + residual_scale * gamma * delta
 ```
 
-First implementation supports fixed `K` and a simple residual-based adaptive
-halting mode. `halt_mode=residual` selects the first depth whose per-token
-update residual falls below `halt_eps` after `min_depth`.
+The predictor supports fixed `K` and two adaptive halting modes:
+
+- `halt_mode=residual`: selects the first depth whose per-token update
+  residual falls below `halt_eps` after `min_depth`.
+- `halt_mode=learned`: selects the first depth whose learned continue
+  probability falls below `halt_threshold` after `min_depth`.
 
 ## 4. Training Loss
 
@@ -131,17 +136,27 @@ When `recurrent.enabled=true`:
 ```text
 L_final = mse(preds[K - 1], target)
 L_inter = mean_k<K-1 mse(preds[k], stopgrad(target))
-L_pred  = L_final + alpha * L_inter
+L_halt  = bce_with_logits(continue_logits, continue_target)
+L_pred  = L_final + alpha * L_inter + beta * L_halt
 L_total = L_pred + lambda * L_SIGReg
 ```
+
+By default `continue_target[k] = 1` when the next recurrent depth reduces the
+true target error by more than `recurrent.halt_min_improvement`; otherwise it is
+0. This trains the head to answer "is another refinement step worth it?" rather
+than merely copying update magnitude. For ablations, `halt_label_mode` can be
+set to `relative_improvement`, `error_threshold`, or `residual_threshold`.
 
 Logged metrics:
 
 - `train/pred_loss`
 - `train/pred_loss_final`
 - `train/pred_loss_inter`
+- `train/pred_loss_halt`
 - `train/sigreg_loss`
 - `train/residual_mean`
+- `train/continue_prob_mean`
+- `train/continue_target_rate`
 
 ## 5. Eval Plan
 
@@ -330,3 +345,28 @@ uv run --active python eval.py --config-name cube \
 
 The first dynamic sweep should try `halt_eps in {1e-3, 3e-4, 1e-4, 3e-5}`
 and report success rate, evaluation time, and mean `depth_used`.
+
+Learned-halting eval examples:
+
+```bash
+uv run --active python eval.py --config-name pusht \
+  policy=ttjepa_pusht_k4_10e/weights_epoch_10.pt \
+  planner.predictor_depth=4 \
+  planner.halt_mode=learned \
+  planner.halt_threshold=0.5 \
+  planner.min_depth=1 \
+  planner.return_depth_stats=true \
+  output.filename=ttjepa_pusht_dynamic_learned_t05_results.txt
+
+uv run --active python eval.py --config-name cube \
+  policy=ttjepa_cube_k4_10e/weights_epoch_10.pt \
+  planner.predictor_depth=4 \
+  planner.halt_mode=learned \
+  planner.halt_threshold=0.5 \
+  planner.min_depth=1 \
+  planner.return_depth_stats=true \
+  output.filename=ttjepa_cube_dynamic_learned_t05_results.txt
+```
+
+The first learned sweep should try `halt_threshold in {0.3, 0.5, 0.7}` and
+compare success rate against mean `depth_used`.

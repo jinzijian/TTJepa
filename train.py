@@ -7,6 +7,7 @@ import lightning as pl
 import stable_pretraining as spt
 import stable_worldmodel as swm
 import torch
+import torch.nn.functional as F
 from lightning.pytorch.loggers import WandbLogger
 from omegaconf import OmegaConf, open_dict
 
@@ -71,10 +72,84 @@ def lejepa_forward(self, batch, stage, cfg):
         else:
             consistency_loss = final_loss.new_zeros(())
 
+        halt_loss_weight = recurrent_cfg.get("halt_loss_weight", 0.0)
+        if halt_loss_weight and "continue_logits" in out_pred:
+            continue_logits = out_pred["continue_logits"]
+            with torch.no_grad():
+                pred_err = (
+                    preds_all.detach() - tgt_emb.detach().unsqueeze(0)
+                ).pow(2).mean(dim=-1)
+                continue_target = torch.zeros_like(pred_err)
+                halt_label_mode = recurrent_cfg.get("halt_label_mode", "improvement")
+
+                if halt_label_mode == "improvement":
+                    min_improvement = recurrent_cfg.get("halt_min_improvement", 0.0)
+                    if pred_err.size(0) > 1:
+                        improvement = pred_err[:-1] - pred_err[1:]
+                        continue_target[:-1] = (
+                            improvement > float(min_improvement)
+                        ).float()
+                elif halt_label_mode == "relative_improvement":
+                    min_rel_improvement = recurrent_cfg.get(
+                        "halt_min_relative_improvement", 0.0
+                    )
+                    if pred_err.size(0) > 1:
+                        improvement = pred_err[:-1] - pred_err[1:]
+                        relative = improvement / pred_err[:-1].clamp_min(1e-8)
+                        continue_target[:-1] = (
+                            relative > float(min_rel_improvement)
+                        ).float()
+                elif halt_label_mode == "error_threshold":
+                    error_threshold = recurrent_cfg.get("halt_error_threshold", None)
+                    if error_threshold is None:
+                        raise ValueError(
+                            "recurrent.halt_error_threshold must be set when "
+                            "halt_label_mode='error_threshold'"
+                        )
+                    continue_target = (pred_err > float(error_threshold)).float()
+                elif halt_label_mode == "residual_threshold":
+                    residual_threshold = recurrent_cfg.get(
+                        "halt_residual_threshold", None
+                    )
+                    if residual_threshold is None:
+                        raise ValueError(
+                            "recurrent.halt_residual_threshold must be set when "
+                            "halt_label_mode='residual_threshold'"
+                        )
+                    continue_target = (
+                        out_pred["residuals"].detach() > float(residual_threshold)
+                    ).float()
+                else:
+                    raise ValueError(
+                        f"Unsupported recurrent.halt_label_mode={halt_label_mode}"
+                    )
+                continue_target[-1] = 0.0
+
+            pos_weight = recurrent_cfg.get("halt_pos_weight", None)
+            if pos_weight is not None:
+                pos_weight = torch.as_tensor(
+                    float(pos_weight),
+                    device=continue_logits.device,
+                    dtype=continue_logits.dtype,
+                )
+            halt_loss = F.binary_cross_entropy_with_logits(
+                continue_logits, continue_target, pos_weight=pos_weight
+            )
+            pred_loss = pred_loss + halt_loss_weight * halt_loss
+            continue_prob_mean = torch.sigmoid(continue_logits.detach()).mean()
+            continue_target_rate = continue_target.detach().mean()
+        else:
+            halt_loss = final_loss.new_zeros(())
+            continue_prob_mean = final_loss.new_zeros(())
+            continue_target_rate = final_loss.new_zeros(())
+
         output["pred_loss"] = pred_loss
         output["pred_loss_final"] = final_loss
         output["pred_loss_inter"] = inter_loss
         output["pred_loss_consistency"] = consistency_loss
+        output["pred_loss_halt"] = halt_loss
+        output["continue_prob_mean"] = continue_prob_mean
+        output["continue_target_rate"] = continue_target_rate
         if recurrent_cfg.get("log_depth_stats", True):
             output["residual_mean"] = out_pred["residuals"].detach().mean()
     else:
@@ -88,7 +163,16 @@ def lejepa_forward(self, batch, stage, cfg):
     metrics_dict = {
         f"{stage}/{k}": v.detach()
         for k, v in output.items()
-        if torch.is_tensor(v) and ("loss" in k or k == "residual_mean")
+        if torch.is_tensor(v)
+        and (
+            "loss" in k
+            or k
+            in {
+                "residual_mean",
+                "continue_prob_mean",
+                "continue_target_rate",
+            }
+        )
     }
     self.log_dict(metrics_dict, on_step=True, sync_dist=True)
     return output

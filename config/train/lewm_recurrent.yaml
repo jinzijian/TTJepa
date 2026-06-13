@@ -47,6 +47,13 @@ recurrent:
   max_depth: 8
   inter_loss_weight: 0.5
   consistency_weight: 0.0
+  halt_loss_weight: 0.1
+  halt_label_mode: improvement
+  halt_min_improvement: 0.0
+  halt_min_relative_improvement: 0.0
+  halt_error_threshold: null
+  halt_residual_threshold: null
+  halt_pos_weight: null
   final_no_stopgrad: true
   intermediate_stopgrad: true
   log_depth_stats: true

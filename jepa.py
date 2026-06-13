@@ -52,6 +52,7 @@ class JEPA(nn.Module):
         predictor_depth=None,
         halt_mode="none",
         halt_eps=None,
+        halt_threshold=0.5,
         min_depth=1,
     ):
         """Predict next state embedding
@@ -64,6 +65,7 @@ class JEPA(nn.Module):
             or predictor_depth is not None
             or halt_mode != "none"
             or halt_eps is not None
+            or halt_threshold != 0.5
             or min_depth != 1
         ):
             predictor_kwargs = {
@@ -71,6 +73,7 @@ class JEPA(nn.Module):
                 "return_all": return_all,
                 "halt_mode": halt_mode,
                 "halt_eps": halt_eps,
+                "halt_threshold": halt_threshold,
                 "min_depth": min_depth,
             }
 
@@ -117,6 +120,7 @@ class JEPA(nn.Module):
         predictor_depth=None,
         halt_mode="none",
         halt_eps=None,
+        halt_threshold=0.5,
         min_depth=1,
         return_depth_stats=False,
     ):
@@ -160,6 +164,7 @@ class JEPA(nn.Module):
                 predictor_depth=predictor_depth,
                 halt_mode=halt_mode,
                 halt_eps=halt_eps,
+                halt_threshold=halt_threshold,
                 min_depth=min_depth,
             )
             if return_depth_stats:
@@ -184,6 +189,7 @@ class JEPA(nn.Module):
             predictor_depth=predictor_depth,
             halt_mode=halt_mode,
             halt_eps=halt_eps,
+            halt_threshold=halt_threshold,
             min_depth=min_depth,
         )
         if return_depth_stats:

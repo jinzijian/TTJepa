@@ -385,10 +385,33 @@ class RecurrentARPredictor(nn.Module):
         )
         self.delta_head = nn.Linear(hidden_dim, self.output_dim)
         self.gamma_head = nn.Linear(hidden_dim, self.output_dim)
+        self.continue_head = nn.Linear(hidden_dim, 1)
         self.residual_scale = nn.Parameter(torch.tensor(float(residual_scale_init)))
 
         nn.init.zeros_(self.delta_head.bias)
         nn.init.constant_(self.gamma_head.bias, -2.0)
+        nn.init.zeros_(self.continue_head.bias)
+        self.register_load_state_dict_pre_hook(self._load_continue_head_compat)
+
+    def _load_continue_head_compat(
+        self,
+        module,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        """Allow fixed-depth checkpoints saved before learned halting to load."""
+        del module, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        weight_key = f"{prefix}continue_head.weight"
+        bias_key = f"{prefix}continue_head.bias"
+        if weight_key not in state_dict:
+            state_dict[weight_key] = self.continue_head.weight.detach().clone()
+        if bias_key not in state_dict:
+            state_dict[bias_key] = self.continue_head.bias.detach().clone()
 
     def forward(
         self,
@@ -398,18 +421,21 @@ class RecurrentARPredictor(nn.Module):
         return_all=False,
         halt_mode="none",
         halt_eps=None,
+        halt_threshold=0.5,
         min_depth=1,
     ):
         """
         x: (B, T, D)
         c: (B, T, action_emb_dim)
         """
-        if halt_mode not in {"none", "residual"}:
+        if halt_mode not in {"none", "residual", "learned"}:
             raise NotImplementedError(
-                "halt_mode must be 'none' or 'residual' for now"
+                "halt_mode must be 'none', 'residual', or 'learned'"
             )
         if halt_mode == "residual" and halt_eps is None:
             raise ValueError("halt_eps must be set when halt_mode='residual'")
+        if not 0.0 <= float(halt_threshold) <= 1.0:
+            raise ValueError("halt_threshold must satisfy 0 <= halt_threshold <= 1")
 
         K = int(max_depth or self.max_depth)
         if K < 1:
@@ -428,6 +454,7 @@ class RecurrentARPredictor(nn.Module):
 
         preds = []
         residuals = []
+        continue_logits = []
         prev = z_hat
         selected_pred = None
         depth_used = torch.full(
@@ -443,16 +470,22 @@ class RecurrentARPredictor(nn.Module):
             h = self.refine_cell(h, c, feedback)
             delta = self.delta_head(h)
             gamma = torch.sigmoid(self.gamma_head(h))
+            continue_logit = self.continue_head(h).squeeze(-1)
             z_hat = z_hat + self.residual_scale * gamma * delta
 
             residual = (z_hat - prev).pow(2).mean(dim=-1)
             preds.append(z_hat)
             residuals.append(residual)
+            continue_logits.append(continue_logit)
             prev = z_hat
 
-            if halt_mode == "residual":
+            if halt_mode in {"residual", "learned"}:
                 current_depth = depth_idx + 1
-                can_halt = residual <= float(halt_eps)
+                if halt_mode == "residual":
+                    can_halt = residual <= float(halt_eps)
+                else:
+                    continue_prob = torch.sigmoid(continue_logit)
+                    can_halt = continue_prob <= float(halt_threshold)
                 if current_depth < min_depth:
                     can_halt = torch.zeros_like(can_halt, dtype=torch.bool)
                 newly_halted = active & can_halt
@@ -473,7 +506,7 @@ class RecurrentARPredictor(nn.Module):
                 if not return_all and not active.any():
                     break
 
-        if halt_mode == "residual":
+        if halt_mode in {"residual", "learned"}:
             if selected_pred is None:
                 selected_pred = z_hat
             else:
@@ -485,6 +518,7 @@ class RecurrentARPredictor(nn.Module):
                 "pred": z_hat,
                 "preds": torch.stack(preds, dim=0),
                 "residuals": torch.stack(residuals, dim=0),
+                "continue_logits": torch.stack(continue_logits, dim=0),
                 "depth_used": depth_used,
             }
 
