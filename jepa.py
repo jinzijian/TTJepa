@@ -90,7 +90,15 @@ class JEPA(nn.Module):
             K, B, T, _ = preds.shape
             preds = self.pred_proj(rearrange(preds, "k b t d -> (k b t) d"))
             out["preds"] = rearrange(preds, "(k b t) d -> k b t d", k=K, b=B, t=T)
-            out["pred"] = out["preds"][-1]
+            if "depth_used" in out:
+                depth_idx = out["depth_used"].clamp(1, K) - 1
+                preds_by_token = rearrange(out["preds"], "k b t d -> b t k d")
+                gather_idx = depth_idx[:, :, None, None].expand(
+                    B, T, 1, preds_by_token.size(-1)
+                )
+                out["pred"] = preds_by_token.gather(2, gather_idx).squeeze(2)
+            else:
+                out["pred"] = out["preds"][-1]
             return out
 
         preds = self.pred_proj(rearrange(out, "b t d -> (b t) d"))

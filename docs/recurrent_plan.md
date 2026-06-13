@@ -118,8 +118,9 @@ gamma = sigmoid(gamma_head(h))
 z_hat = z_hat + residual_scale * gamma * delta
 ```
 
-First implementation supports fixed `K` only. Non-`none` halting modes should fail
-clearly until adaptive halting is implemented.
+First implementation supports fixed `K` and a simple residual-based adaptive
+halting mode. `halt_mode=residual` selects the first depth whose per-token
+update residual falls below `halt_eps` after `min_depth`.
 
 ## 4. Training Loss
 
@@ -304,3 +305,28 @@ uv run --active python eval.py --config-name tworoom \
   planner.predictor_depth=4 \
   output.filename=ttjepa_tworoom_h1_k4_paper_t100_b150_results.txt
 ```
+
+Residual-halting eval examples:
+
+```bash
+uv run --active python eval.py --config-name pusht \
+  policy=ttjepa_pusht_k4_10e/weights_epoch_10.pt \
+  planner.predictor_depth=4 \
+  planner.halt_mode=residual \
+  planner.halt_eps=1e-4 \
+  planner.min_depth=1 \
+  planner.return_depth_stats=true \
+  output.filename=ttjepa_pusht_dynamic_res1e-4_results.txt
+
+uv run --active python eval.py --config-name cube \
+  policy=ttjepa_cube_k4_10e/weights_epoch_10.pt \
+  planner.predictor_depth=4 \
+  planner.halt_mode=residual \
+  planner.halt_eps=1e-4 \
+  planner.min_depth=1 \
+  planner.return_depth_stats=true \
+  output.filename=ttjepa_cube_dynamic_res1e-4_results.txt
+```
+
+The first dynamic sweep should try `halt_eps in {1e-3, 3e-4, 1e-4, 3e-5}`
+and report success rate, evaluation time, and mean `depth_used`.

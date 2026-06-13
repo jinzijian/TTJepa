@@ -404,8 +404,12 @@ class RecurrentARPredictor(nn.Module):
         x: (B, T, D)
         c: (B, T, action_emb_dim)
         """
-        if halt_mode != "none":
-            raise NotImplementedError("adaptive halting is not implemented yet")
+        if halt_mode not in {"none", "residual"}:
+            raise NotImplementedError(
+                "halt_mode must be 'none' or 'residual' for now"
+            )
+        if halt_mode == "residual" and halt_eps is None:
+            raise ValueError("halt_eps must be set when halt_mode='residual'")
 
         K = int(max_depth or self.max_depth)
         if K < 1:
@@ -425,8 +429,16 @@ class RecurrentARPredictor(nn.Module):
         preds = []
         residuals = []
         prev = z_hat
+        selected_pred = None
+        depth_used = torch.full(
+            x.shape[:2],
+            fill_value=K,
+            device=x.device,
+            dtype=torch.long,
+        )
+        active = torch.ones(x.shape[:2], device=x.device, dtype=torch.bool)
 
-        for _ in range(K):
+        for depth_idx in range(K):
             feedback = z_hat - anchor
             h = self.refine_cell(h, c, feedback)
             delta = self.delta_head(h)
@@ -438,17 +450,42 @@ class RecurrentARPredictor(nn.Module):
             residuals.append(residual)
             prev = z_hat
 
+            if halt_mode == "residual":
+                current_depth = depth_idx + 1
+                can_halt = residual <= float(halt_eps)
+                if current_depth < min_depth:
+                    can_halt = torch.zeros_like(can_halt, dtype=torch.bool)
+                newly_halted = active & can_halt
+
+                if selected_pred is None:
+                    selected_pred = torch.zeros_like(z_hat)
+                selected_pred = torch.where(
+                    newly_halted.unsqueeze(-1),
+                    z_hat,
+                    selected_pred,
+                )
+                depth_used = torch.where(
+                    newly_halted,
+                    torch.full_like(depth_used, current_depth),
+                    depth_used,
+                )
+                active = active & ~newly_halted
+                if not return_all and not active.any():
+                    break
+
+        if halt_mode == "residual":
+            if selected_pred is None:
+                selected_pred = z_hat
+            else:
+                selected_pred = torch.where(active.unsqueeze(-1), z_hat, selected_pred)
+            z_hat = selected_pred
+
         if return_all:
             return {
                 "pred": z_hat,
                 "preds": torch.stack(preds, dim=0),
                 "residuals": torch.stack(residuals, dim=0),
-                "depth_used": torch.full(
-                    x.shape[:2],
-                    fill_value=K,
-                    device=x.device,
-                    dtype=torch.long,
-                ),
+                "depth_used": depth_used,
             }
 
         return z_hat
