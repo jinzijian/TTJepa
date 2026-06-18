@@ -25,6 +25,65 @@ class JEPA(nn.Module):
         self.action_encoder = action_encoder
         self.projector = projector or nn.Identity()
         self.pred_proj = pred_proj or nn.Identity()
+        self.reset_depth_stats()
+
+    def reset_depth_stats(self):
+        self._depth_stats_sum = None
+        self._depth_stats_count = None
+        self._depth_stats_hist = None
+
+    def _ensure_depth_stats(self, device, max_depth):
+        if self._depth_stats_sum is None:
+            self._depth_stats_sum = torch.zeros((), device=device, dtype=torch.float64)
+            self._depth_stats_count = torch.zeros((), device=device, dtype=torch.long)
+            self._depth_stats_hist = torch.zeros(
+                max_depth + 1, device=device, dtype=torch.long
+            )
+        elif self._depth_stats_hist.numel() <= max_depth:
+            hist = torch.zeros(max_depth + 1, device=device, dtype=torch.long)
+            hist[: self._depth_stats_hist.numel()] = self._depth_stats_hist
+            self._depth_stats_hist = hist
+
+    def _record_depth_stats(self, depth_used, max_depth=None):
+        with torch.no_grad():
+            depth_used = depth_used.detach().reshape(-1).to(torch.long)
+            if depth_used.numel() == 0:
+                return
+            max_depth = int(
+                max_depth
+                or getattr(self.predictor, "max_depth", None)
+                or depth_used.max().item()
+            )
+            self._ensure_depth_stats(depth_used.device, max_depth)
+            self._depth_stats_sum.add_(depth_used.to(torch.float64).sum())
+            self._depth_stats_count.add_(depth_used.numel())
+            hist = torch.bincount(depth_used, minlength=self._depth_stats_hist.numel())
+            self._depth_stats_hist[: hist.numel()].add_(hist)
+
+    def get_depth_stats(self):
+        if self._depth_stats_count is None:
+            return {}
+
+        count = int(self._depth_stats_count.item())
+        if count == 0:
+            return {}
+
+        hist = self._depth_stats_hist.detach().cpu()
+        nonzero = torch.nonzero(hist, as_tuple=False).flatten().tolist()
+        nonzero = [int(depth) for depth in nonzero if depth > 0]
+        depth_histogram = {str(depth): int(hist[depth].item()) for depth in nonzero}
+        depth_fraction = {
+            str(depth): float(hist[depth].item() / count) for depth in nonzero
+        }
+
+        return {
+            "mean_depth": float(self._depth_stats_sum.item() / count),
+            "num_predictions": count,
+            "min_depth": min(nonzero) if nonzero else None,
+            "max_depth": max(nonzero) if nonzero else None,
+            "depth_histogram": depth_histogram,
+            "depth_fraction": depth_fraction,
+        }
 
     def encode(self, info):
         """Encode observations and actions into embeddings.
@@ -252,6 +311,11 @@ class JEPA(nn.Module):
         default_rollout_kwargs = getattr(self, "rollout_kwargs", {})
         rollout_kwargs = {**default_rollout_kwargs, **rollout_kwargs}
         info_dict = self.rollout(info_dict, action_candidates, **rollout_kwargs)
+        if "depth_used" in info_dict:
+            self._record_depth_stats(
+                info_dict["depth_used"],
+                max_depth=rollout_kwargs.get("predictor_depth"),
+            )
 
         cost = self.criterion(info_dict)
         

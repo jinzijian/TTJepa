@@ -81,7 +81,11 @@ def run(cfg: DictConfig):
 
     # create world environment
     cfg.world.max_episode_steps = 2 * cfg.eval.eval_budget
-    world = swm.World(**cfg.world, image_shape=(224, 224))
+    image_shape = (
+        int(cfg.world.get("height", cfg.eval.img_size)),
+        int(cfg.world.get("width", cfg.eval.img_size)),
+    )
+    world = swm.World(**cfg.world, image_shape=image_shape)
 
     # create the transform
     transform = {
@@ -122,6 +126,8 @@ def run(cfg: DictConfig):
             if OmegaConf.is_config(planner_cfg)
             else dict(planner_cfg)
         )
+        if hasattr(model, "reset_depth_stats"):
+            model.reset_depth_stats()
         config = swm.PlanConfig(**cfg.plan_config)
         solver = hydra.utils.instantiate(cfg.solver, model=model)
         policy = swm.policy.WorldModelPolicy(
@@ -184,6 +190,10 @@ def run(cfg: DictConfig):
         video=results_path,
     )
     end_time = time.time()
+    if cfg.policy != "random" and hasattr(model, "get_depth_stats"):
+        depth_stats = model.get_depth_stats()
+        if depth_stats:
+            metrics["depth_stats"] = depth_stats
     
     print(metrics)
 

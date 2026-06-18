@@ -12,7 +12,83 @@ from lightning.pytorch.loggers import WandbLogger
 from omegaconf import OmegaConf, open_dict
 
 from module import SIGReg
+from recurrent_halting import build_continue_targets
 from utils import get_column_normalizer, get_img_preprocessor, SaveCkptCallback
+
+
+def _as_list(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+def _align_probe_feature(value, batch_size, target_len, n_preds):
+    if not torch.is_tensor(value) or value.size(0) != batch_size:
+        return None
+    value = torch.nan_to_num(value.detach(), 0.0)
+    if value.ndim == 2:
+        return value[:, None, :].expand(-1, target_len, -1)
+    if value.ndim < 3:
+        return None
+    value = value.reshape(value.size(0), value.size(1), -1)
+    if value.size(1) >= n_preds + target_len:
+        return value[:, n_preds : n_preds + target_len]
+    if value.size(1) == target_len:
+        return value
+    if value.size(1) > target_len:
+        return value[:, -target_len:]
+    return None
+
+
+def _build_probe_feature_weights(batch, target, n_preds, recurrent_cfg):
+    keys = _as_list(recurrent_cfg.get("halt_probe_keys", None))
+    if not keys:
+        return None
+
+    batch_size, target_len, feature_dim = target.shape
+    aligned_features = []
+    for key in keys:
+        aligned = _align_probe_feature(batch.get(key), batch_size, target_len, n_preds)
+        if aligned is not None:
+            aligned_features.append(aligned)
+    if not aligned_features:
+        return None
+
+    probe = torch.cat(aligned_features, dim=-1).to(
+        device=target.device,
+        dtype=target.dtype,
+    )
+    x = target.detach().reshape(-1, feature_dim).float()
+    y = probe.detach().reshape(-1, probe.size(-1)).float()
+    finite = torch.isfinite(x).all(dim=1) & torch.isfinite(y).all(dim=1)
+    x = x[finite]
+    y = y[finite]
+    if x.size(0) < 2 or y.size(1) == 0:
+        return None
+
+    eps = float(recurrent_cfg.get("halt_probe_weight_eps", 1e-6))
+    x = x - x.mean(dim=0, keepdim=True)
+    y = y - y.mean(dim=0, keepdim=True)
+    x = x / x.std(dim=0, unbiased=False, keepdim=True).clamp_min(eps)
+    y = y / y.std(dim=0, unbiased=False, keepdim=True).clamp_min(eps)
+
+    corr = x.transpose(0, 1).matmul(y) / float(x.size(0))
+    score = corr.abs().mean(dim=1).clamp_min(eps)
+    score = score / score.mean().clamp_min(eps)
+
+    strength = float(recurrent_cfg.get("halt_probe_weight_strength", 1.0))
+    weights = torch.ones_like(score).lerp(score, strength)
+    min_weight = recurrent_cfg.get("halt_probe_weight_min", None)
+    max_weight = recurrent_cfg.get("halt_probe_weight_max", None)
+    if min_weight is not None or max_weight is not None:
+        weights = weights.clamp(
+            min=float(min_weight) if min_weight is not None else None,
+            max=float(max_weight) if max_weight is not None else None,
+        )
+    weights = weights / weights.mean().clamp_min(eps)
+    return weights.to(device=target.device, dtype=target.dtype)
 
 
 def lejepa_forward(self, batch, stage, cfg):
@@ -76,54 +152,35 @@ def lejepa_forward(self, batch, stage, cfg):
         if halt_loss_weight and "continue_logits" in out_pred:
             continue_logits = out_pred["continue_logits"]
             with torch.no_grad():
-                pred_err = (
-                    preds_all.detach() - tgt_emb.detach().unsqueeze(0)
-                ).pow(2).mean(dim=-1)
-                continue_target = torch.zeros_like(pred_err)
-                halt_label_mode = recurrent_cfg.get("halt_label_mode", "improvement")
-
-                if halt_label_mode == "improvement":
-                    min_improvement = recurrent_cfg.get("halt_min_improvement", 0.0)
-                    if pred_err.size(0) > 1:
-                        improvement = pred_err[:-1] - pred_err[1:]
-                        continue_target[:-1] = (
-                            improvement > float(min_improvement)
-                        ).float()
-                elif halt_label_mode == "relative_improvement":
-                    min_rel_improvement = recurrent_cfg.get(
+                feature_weights = _build_probe_feature_weights(
+                    batch,
+                    tgt_emb,
+                    n_preds,
+                    recurrent_cfg,
+                )
+                continue_target, halt_depth = build_continue_targets(
+                    preds_all,
+                    tgt_emb,
+                    mode=recurrent_cfg.get("halt_label_mode", "improvement"),
+                    residuals=out_pred.get("residuals"),
+                    min_improvement=recurrent_cfg.get("halt_min_improvement", 0.0),
+                    min_relative_improvement=recurrent_cfg.get(
                         "halt_min_relative_improvement", 0.0
-                    )
-                    if pred_err.size(0) > 1:
-                        improvement = pred_err[:-1] - pred_err[1:]
-                        relative = improvement / pred_err[:-1].clamp_min(1e-8)
-                        continue_target[:-1] = (
-                            relative > float(min_rel_improvement)
-                        ).float()
-                elif halt_label_mode == "error_threshold":
-                    error_threshold = recurrent_cfg.get("halt_error_threshold", None)
-                    if error_threshold is None:
-                        raise ValueError(
-                            "recurrent.halt_error_threshold must be set when "
-                            "halt_label_mode='error_threshold'"
-                        )
-                    continue_target = (pred_err > float(error_threshold)).float()
-                elif halt_label_mode == "residual_threshold":
-                    residual_threshold = recurrent_cfg.get(
+                    ),
+                    error_threshold=recurrent_cfg.get("halt_error_threshold", None),
+                    residual_threshold=recurrent_cfg.get(
                         "halt_residual_threshold", None
-                    )
-                    if residual_threshold is None:
-                        raise ValueError(
-                            "recurrent.halt_residual_threshold must be set when "
-                            "halt_label_mode='residual_threshold'"
-                        )
-                    continue_target = (
-                        out_pred["residuals"].detach() > float(residual_threshold)
-                    ).float()
-                else:
-                    raise ValueError(
-                        f"Unsupported recurrent.halt_label_mode={halt_label_mode}"
-                    )
-                continue_target[-1] = 0.0
+                    ),
+                    oracle_relative_tolerance=recurrent_cfg.get(
+                        "halt_oracle_relative_tolerance", 0.0
+                    ),
+                    oracle_abs_tolerance=recurrent_cfg.get(
+                        "halt_oracle_abs_tolerance", 0.0
+                    ),
+                    min_depth=recurrent_cfg.get("halt_min_depth", 1),
+                    whiten_eps=recurrent_cfg.get("halt_whiten_eps", 1e-6),
+                    feature_weights=feature_weights,
+                )
 
             pos_weight = recurrent_cfg.get("halt_pos_weight", None)
             if pos_weight is not None:
@@ -138,10 +195,16 @@ def lejepa_forward(self, batch, stage, cfg):
             pred_loss = pred_loss + halt_loss_weight * halt_loss
             continue_prob_mean = torch.sigmoid(continue_logits.detach()).mean()
             continue_target_rate = continue_target.detach().mean()
+            halt_depth_mean = halt_depth.detach().float().mean()
+            if feature_weights is not None:
+                output["halt_probe_weight_min"] = feature_weights.detach().min()
+                output["halt_probe_weight_max"] = feature_weights.detach().max()
+                output["halt_probe_weight_std"] = feature_weights.detach().std(unbiased=False)
         else:
             halt_loss = final_loss.new_zeros(())
             continue_prob_mean = final_loss.new_zeros(())
             continue_target_rate = final_loss.new_zeros(())
+            halt_depth_mean = final_loss.new_zeros(())
 
         output["pred_loss"] = pred_loss
         output["pred_loss_final"] = final_loss
@@ -150,6 +213,7 @@ def lejepa_forward(self, batch, stage, cfg):
         output["pred_loss_halt"] = halt_loss
         output["continue_prob_mean"] = continue_prob_mean
         output["continue_target_rate"] = continue_target_rate
+        output["halt_depth_mean"] = halt_depth_mean
         if recurrent_cfg.get("log_depth_stats", True):
             output["residual_mean"] = out_pred["residuals"].detach().mean()
     else:
@@ -171,6 +235,10 @@ def lejepa_forward(self, batch, stage, cfg):
                 "residual_mean",
                 "continue_prob_mean",
                 "continue_target_rate",
+                "halt_depth_mean",
+                "halt_probe_weight_min",
+                "halt_probe_weight_max",
+                "halt_probe_weight_std",
             }
         )
     }

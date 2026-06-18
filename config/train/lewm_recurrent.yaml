@@ -53,6 +53,9 @@ recurrent:
   halt_min_relative_improvement: 0.0
   halt_error_threshold: null
   halt_residual_threshold: null
+  halt_oracle_relative_tolerance: 0.0
+  halt_oracle_abs_tolerance: 0.0
+  halt_min_depth: 1
   halt_pos_weight: null
   final_no_stopgrad: true
   intermediate_stopgrad: true

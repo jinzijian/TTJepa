@@ -1,0 +1,12 @@
+defaults:
+  - lewm_recurrent
+  - _self_
+
+output_model_name: lewm_recurrent_dynamic
+
+recurrent:
+  halt_label_mode: oracle_depth
+  halt_loss_weight: 0.2
+  halt_oracle_relative_tolerance: 0.02
+  halt_oracle_abs_tolerance: 0.0
+  halt_min_depth: 1

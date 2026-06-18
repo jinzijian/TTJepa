@@ -1,0 +1,44 @@
+defaults:
+  - lewm_recurrent_dynamic
+  - _self_
+
+output_model_name: lewm_recurrent_dynamic_probe_weighted
+
+data:
+  dataset:
+    keys_to_load:
+      - pixels
+      - action
+      - observation
+      - qpos
+      - privileged_block_0_pos
+      - privileged_block_1_pos
+      - privileged_block_2_pos
+      - goal_privileged_block_0_pos
+      - goal_privileged_block_1_pos
+      - goal_privileged_block_2_pos
+    keys_to_cache:
+      - action
+      - observation
+      - qpos
+      - privileged_block_0_pos
+      - privileged_block_1_pos
+      - privileged_block_2_pos
+      - goal_privileged_block_0_pos
+      - goal_privileged_block_1_pos
+      - goal_privileged_block_2_pos
+
+recurrent:
+  halt_label_mode: oracle_depth_probe_weighted
+  halt_probe_keys:
+    - qpos
+    - privileged_block_0_pos
+    - privileged_block_1_pos
+    - privileged_block_2_pos
+    - goal_privileged_block_0_pos
+    - goal_privileged_block_1_pos
+    - goal_privileged_block_2_pos
+  halt_probe_weight_strength: 1.0
+  halt_probe_weight_min: 0.25
+  halt_probe_weight_max: 4.0
+  halt_probe_weight_eps: 1.0e-6

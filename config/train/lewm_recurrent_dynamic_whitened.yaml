@@ -1,0 +1,9 @@
+defaults:
+  - lewm_recurrent_dynamic
+  - _self_
+
+output_model_name: lewm_recurrent_dynamic_whitened
+
+recurrent:
+  halt_label_mode: oracle_depth_whitened
+  halt_whiten_eps: 1.0e-6
