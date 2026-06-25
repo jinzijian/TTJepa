@@ -1,0 +1,87 @@
+# RefineJEPA Experiment Results
+
+This file is the compact result ledger for the current RefineJEPA dynamic-`K`
+experiments. RefineJEPA is built on the LeWM latent-planning codebase.
+
+## LeWM Reproduction Baselines
+
+| Task | Reproduced LeWM | Official LeWM | Notes |
+| --- | ---: | ---: | --- |
+| PushT 10e | 92% | 96% | close to ceiling |
+| Reacher 10e | 80% | 86% | default 50/25 eval |
+| Cube single 10e | 72% | 74% | OGBench cube single |
+| TwoRoom 10e | 94-98% | 87% | fixed timestep eval |
+
+Detailed environment and reproduction notes are in
+[LEWM_REPRODUCTION_NOTES.md](LEWM_REPRODUCTION_NOTES.md).
+
+## Fixed-Depth RefineJEPA
+
+| Dataset / run | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Notes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Reacher seed42 | 80% | 88% | n/a | n/a | 86% | K4 worse than K1 |
+| Cube single seed42 | 72% | 80% | n/a | n/a | 78% | K4 slightly lower |
+| Cube single seed43 | 72% | 88% | n/a | n/a | 90% | K4 helps |
+| Cube single seed44 | 72% | 66% | n/a | n/a | 64% | K4 slightly lower |
+| Cube single 3-seed avg | 72% | 78% | n/a | n/a | 77.3% | average K4 slightly lower |
+| Cube single original rerun `20260621_refixed_k1234` | 72% | 80% | 76% | 78% | 78% | same-source K1-4 sweep |
+| Cube double original rerun `20260621_refixed_k1234` | 66% | 72% | 70% | 68% | 70% | depth does not help |
+| Cube triple original | 74% | 70% | 76% | 76% | 78% | clearest depth-positive setting |
+
+Important distinction: LeWM baseline is the original non-recurrent transition
+predictor. Fixed `K1` is the recurrent RefineJEPA predictor stopped after one
+refinement step.
+
+## Post-Hoc Raw Latent MSE Selection
+
+This analysis selects between evaluated depths using observed raw latent-MSE
+improvement. It is a diagnostic, not the deployed learned selector.
+
+| Dataset | Fixed K1 | Fixed K4 | Best raw-MSE dynamic K | Hindsight K1/K4 chooser | Depth-helped cases |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
+| Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
+| Cube double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
+| Cube triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
+
+Summary:
+
+- Raw MSE has signal on cube-triple: `70% -> 76%` at mean `K=2.32`.
+- Raw MSE still misses the best fixed-depth and hindsight outcomes.
+- The likely limitation is planner alignment: lower latent MSE does not always
+  mean better CEM candidate ranking.
+
+## Learned Continue Head From Raw-MSE Targets
+
+| Run | Learned dynamic result | LeWM baseline | Fixed K1 sanity | Fixed K4 sanity | Notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `rel00005` | 78%@K=1.064 | 74% | 74% | 74% | clean dynamic-compute result |
+| `rel0002` | 78%@K=1.035 | 74% | 78% | 72% | avoids harmful over-refinement |
+| `rel0005` | 80%@K=1.000 to K=1.062 | 74% | 80% | 80% | likely training-time regularization |
+| `rel0001` | 74%@K=1.47 | 74% | n/a | n/a | weaker |
+| `rel000` | 66% near K1 | 74% | n/a | n/a | no-margin target fails |
+
+Main result to use for the dynamic-compute comparison:
+
+```text
+rel00005: 78% success at mean K=1.064, compared with 74% LeWM and
+74% same-checkpoint fixed K1/K4. This is about 73.4% less transition-depth
+compute than always using K4.
+```
+
+Result to discuss separately:
+
+```text
+rel0005: K1, dynamic K, and K4 all reach 80%, suggesting a training-time
+regularization effect rather than a clean test-time compute allocation effect.
+```
+
+## Current Paper Position
+
+The main paper should focus on raw latent MSE dynamic `K`:
+
+1. Show fixed `K` matters but no fixed depth dominates.
+2. Show raw latent MSE is a useful first signal.
+3. Show learned dynamic `K` can improve success with near-K1 compute.
+4. Analyze when MSE helps, when it fails, and why planner benefit is the more
+   direct target for future work.
