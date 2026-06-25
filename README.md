@@ -83,14 +83,20 @@ more interesting: `K` changes planning success, but the useful depth is
 dataset- and checkpoint-dependent. This is exactly why dynamic allocation is
 the central question.
 
-## Raw Latent MSE Diagnostic
+## Post-Hoc Raw Latent MSE Diagnostic
 
 The first analysis asks whether raw latent MSE can identify transitions that
-benefit from deeper refinement. This is a post-hoc diagnostic: it compares
-already evaluated fixed-depth outcomes and selects between shallow and deeper
-refinement based on observed latent-MSE improvement.
+benefit from deeper refinement. This is not a deployable learned policy. It is
+a post-hoc teacher diagnostic: after evaluating fixed depths, it uses the true
+next latent to measure whether deeper refinement reduced prediction error, then
+asks how well that signal would select between shallow and deeper outcomes.
 
-| Dataset | Fixed K1 | Fixed K4 | Best raw-MSE dynamic K | Hindsight K1/K4 chooser | Depth-helped cases |
+This table should not be read as the same experiment as the learned-head table
+below. It uses observed target-latent MSE after the fact; the learned-head table
+uses a trained continue head at inference time and does not see the target
+latent.
+
+| Dataset | Fixed K1 | Fixed K4 | Best post-hoc raw-MSE selector | Hindsight K1/K4 chooser | Depth-helped cases |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
 | Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
@@ -112,6 +118,12 @@ Takeaways:
 The learned version uses the same raw-MSE idea as training supervision. Each
 recurrent state predicts whether another refinement step should be taken. At
 evaluation time, the continue head chooses the depth automatically.
+
+This is the deployable version of the idea, but it is a different experiment
+from the post-hoc diagnostic above. It uses raw-MSE-derived labels during
+training, then relies on the model's predicted continue probability at test
+time. Because the selector is learned and the checkpoints differ, the numbers
+are not expected to exactly match the post-hoc teacher selector.
 
 The four-dataset learned-head sweep is below. These rows come from the
 `ttjepa_*_dynamic_oracle_k4_10e` checkpoints, where the continue target is built

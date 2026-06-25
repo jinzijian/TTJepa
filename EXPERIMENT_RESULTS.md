@@ -35,9 +35,13 @@ refinement step.
 ## Post-Hoc Raw Latent MSE Selection
 
 This analysis selects between evaluated depths using observed raw latent-MSE
-improvement. It is a diagnostic, not the deployed learned selector.
+improvement. It is a teacher diagnostic, not the deployed learned selector: it
+uses the true next latent after evaluation to score whether deeper refinement
+helped. The learned-head table below uses a trained continue head at inference,
+so the two tables should not be interpreted as duplicate measurements of the
+same method.
 
-| Dataset | Fixed K1 | Fixed K4 | Best raw-MSE dynamic K | Hindsight K1/K4 chooser | Depth-helped cases |
+| Dataset | Fixed K1 | Fixed K4 | Best post-hoc raw-MSE selector | Hindsight K1/K4 chooser | Depth-helped cases |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
 | Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
@@ -54,7 +58,9 @@ Summary:
 ## Learned Continue Head From Raw-MSE Targets
 
 These are the four available raw-MSE learned-halting checkpoints on the four
-core datasets.
+core datasets. Unlike the post-hoc diagnostic above, this is an inference-time
+selector: the model sees its recurrent state and predicted continue probability,
+not the true target latent MSE.
 
 | Dataset | Checkpoint family | LeWM baseline | Fixed K1 | Fixed K4 | Best learned dynamic K | Notes |
 | --- | --- | ---: | ---: | ---: | ---: | --- |

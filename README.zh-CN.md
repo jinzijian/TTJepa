@@ -49,13 +49,18 @@ refinement。
 结论不是“越深越好”，而是：`K` 确实会改变 planning success，但不同数据集、
 不同 checkpoint 需要的深度不同，所以 dynamic allocation 是合理问题。
 
-## Raw Latent MSE 诊断
+## Post-Hoc Raw Latent MSE 诊断
 
 第一版分析直接看 raw latent MSE：如果更深的 recurrent step 明显降低 next-latent
 prediction error，就认为这个 transition 值得继续 refine。这个表是 post-hoc
-诊断，不是最终部署方法。
+teacher 诊断，不是最终部署方法：它在 eval 之后看到了真实 next latent，所以能直接
+计算“更深层到底有没有降低 MSE”。
 
-| Dataset | Fixed K1 | Fixed K4 | Best raw-MSE dynamic K | Hindsight K1/K4 chooser | Depth-helped cases |
+所以它不能和下面 learned-head 表当成同一个实验来比。下面 learned-head 是训练时用
+raw-MSE label 做监督，测试时只看模型自己的 continue probability，不看真实 next
+latent。
+
+| Dataset | Fixed K1 | Fixed K4 | Best post-hoc raw-MSE selector | Hindsight K1/K4 chooser | Depth-helped cases |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
 | Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
@@ -71,6 +76,10 @@ planner 真正在乎的 action ranking / planner benefit。
 
 更干净的版本是把 raw latent MSE improvement 当训练监督，让 recurrent state
 上的 continue head 学会预测要不要继续。测试时模型自动选 `K`。
+
+这和上面的 post-hoc 诊断不是同一件事：上表是“事后用真实 latent MSE 做 teacher
+选择”；这里是“训练一个 continue head，测试时模型自己选”。所以数字不一样是正常的，
+不能写成同一套 dynamic raw MSE 结果。
 
 四个数据集的 raw-MSE learned-halting 结果如下：
 
