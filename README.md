@@ -113,25 +113,29 @@ The learned version uses the same raw-MSE idea as training supervision. Each
 recurrent state predicts whether another refinement step should be taken. At
 evaluation time, the continue head chooses the depth automatically.
 
-Current cube-triple learned-head results:
+The four-dataset learned-head sweep is below. These rows come from the
+`ttjepa_*_dynamic_oracle_k4_10e` checkpoints, where the continue target is built
+from raw latent-MSE depth labels.
 
-| Run | Learned dynamic result | LeWM baseline | Fixed K1 sanity | Fixed K4 sanity | Interpretation |
+| Dataset | LeWM baseline | Fixed K1 | Fixed K4 | Best learned dynamic K | Interpretation |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `rel00005` | 78%@K=1.064 | 74% | 74% | 74% | Clean dynamic-K gain with near-K1 compute |
-| `rel0002` | 78%@K=1.035 | 74% | 78% | 72% | Avoids harmful over-refinement, but matches same-checkpoint K1 |
-| `rel0005` | 80%@K=1.000 to K=1.062 | 74% | 80% | 80% | Strong training-time regularization effect; excluded from the clean dynamic-compute comparison |
-| `rel0001` | 74%@K=1.47 | 74% | n/a | n/a | Weaker setting |
-| `rel000` | 66% near K1 | 74% | n/a | n/a | No-margin target fails |
+| Reacher | 80% | 88%@K1.00 | 86%@K4.00 | 90%@K1.003 (`t=0.5`) | Dynamic head slightly beats both fixed depths while using near-K1 compute |
+| Cube single | 72% | 78.00%@K1.00 | 77.33%@K4.00 | 81.33%@K1.13 (`t=0.5`, 3 seeds) | Strongest clean learned dynamic-K result |
+| Cube double | 66% | 72%@K1.00 | 70%@K4.00 | 72%@K1.003-1.020 (`t=0.35/0.5/0.7`) | Matches K1; no evidence that extra depth helps this checkpoint |
+| Cube triple | 74% | 70%@K1.00 | 78%@K4.00 | 74%@K1.40 (`t=0.001` diagnostic) | Raw learned halt under-allocates depth and misses the K4 gain |
 
-The cleanest dynamic-compute result so far is `rel00005`: `78%` success at mean
-`K=1.064`, compared with `74%` for LeWM and `74%` for the same checkpoint's fixed
-`K1` and fixed `K4` sanity checks. Relative to always using `K4`, this uses about
-`73.4%` less transition-depth compute.
+The main readout is mixed but useful. Cube single is the clearest positive
+learned dynamic result: `81.33%` at mean `K=1.13`, compared with `78.00%` fixed
+K1 and `77.33%` fixed K4. Reacher also has a small positive learned result.
+Cube double mostly says "do not spend compute." Cube triple exposes the main
+failure mode: fixed K4 is useful, but the raw-MSE learned halt head mostly stops
+near K1, so it loses the deeper-refinement gain.
 
-The `rel0005` result is important but should be discussed separately. Since
-`K1`, dynamic `K`, and `K4` all reach `80%`, it suggests that joint-depth
-training may regularize the latent predictor or reduce smoothing, rather than
-being clean evidence that dynamic test-time compute selected better depths.
+There is also a later cube-triple joint-depth variant (`rel00005`, `rel0002`,
+`rel0005`, etc.) where the best clean dynamic result reaches `78%@K=1.064`, and
+one stronger training variant reaches `80%` at all depths. That batch is useful
+for studying training-time regularization, but it is not the four-dataset
+raw-MSE learned-head sweep above.
 
 ## Analysis Direction
 

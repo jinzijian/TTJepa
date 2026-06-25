@@ -72,21 +72,23 @@ planner 真正在乎的 action ranking / planner benefit。
 更干净的版本是把 raw latent MSE improvement 当训练监督，让 recurrent state
 上的 continue head 学会预测要不要继续。测试时模型自动选 `K`。
 
-| Run | Learned dynamic result | LeWM baseline | Fixed K1 sanity | Fixed K4 sanity | 解释 |
+四个数据集的 raw-MSE learned-halting 结果如下：
+
+| Dataset | LeWM baseline | Fixed K1 | Fixed K4 | Best learned dynamic K | 解释 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `rel00005` | 78%@K=1.064 | 74% | 74% | 74% | 干净的 dynamic-K 正结果，几乎 K1 compute |
-| `rel0002` | 78%@K=1.035 | 74% | 78% | 72% | 避开有害的深层，但没有超过同 checkpoint K1 |
-| `rel0005` | 80%@K=1.000 to K=1.062 | 74% | 80% | 80% | 更像 joint-depth 训练正则化效果，不放主 dynamic compute 对比 |
-| `rel0001` | 74%@K=1.47 | 74% | n/a | n/a | 较弱 |
-| `rel000` | 66% near K1 | 74% | n/a | n/a | 没有 margin 的 target 失败 |
+| Reacher | 80% | 88%@K1.00 | 86%@K4.00 | 90%@K1.003 (`t=0.5`) | learned head 略高于两个 fixed depth，几乎 K1 compute |
+| Cube single | 72% | 78.00%@K1.00 | 77.33%@K4.00 | 81.33%@K1.13 (`t=0.5`, 3 seeds) | 最干净的 learned dynamic-K 正结果 |
+| Cube double | 66% | 72%@K1.00 | 70%@K4.00 | 72%@K1.003-1.020 (`t=0.35/0.5/0.7`) | 基本等于 K1；这个 checkpoint 不需要深层 |
+| Cube triple | 74% | 70%@K1.00 | 78%@K4.00 | 74%@K1.40 (`t=0.001` diagnosis) | raw learned halt 分配深度太少，没拿回 K4 gain |
 
-目前最干净的 dynamic compute 结果是 `rel00005`：`78%` success，mean `K=1.064`，
-对比 LeWM `74%`，同 checkpoint fixed K1/K4 sanity 都是 `74%`。相对 always K4，
-它少用了约 `73.4%` 的 transition-depth compute。
+这个表比单看 cube-triple 更准确：Cube single 是最强正例，Reacher 有小正例，
+Cube double 说明 dynamic head 可以学成“别多算”，Cube triple 则暴露 raw latent
+MSE label 的失败模式。也就是说 learned dynamic K 不是完全没学会，而是在最需要深层
+的 cube-triple 上没有把需要继续的样本挑出来。
 
-`rel0005` 的 `80%` 很重要，但应该单独讨论：因为 K1、dynamic K、K4 都是 80%，
-它更像训练时 joint-depth loss 改善 latent predictor / 缓解 smoothing 的现象，而不是纯
-dynamic test-time compute 的证据。
+另有一批 cube-triple joint-depth variant：`rel00005` 可到 `78%@K=1.064`，
+`rel0005` 能让 K1/dynamic/K4 都到 `80%`。这批更像训练时正则化或缓解 smoothing
+的线索，不作为四数据集 learned-halting 主表。
 
 ## 当前论文主线
 

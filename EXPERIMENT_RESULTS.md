@@ -53,28 +53,46 @@ Summary:
 
 ## Learned Continue Head From Raw-MSE Targets
 
-| Run | Learned dynamic result | LeWM baseline | Fixed K1 sanity | Fixed K4 sanity | Notes |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `rel00005` | 78%@K=1.064 | 74% | 74% | 74% | clean dynamic-compute result |
-| `rel0002` | 78%@K=1.035 | 74% | 78% | 72% | avoids harmful over-refinement |
-| `rel0005` | 80%@K=1.000 to K=1.062 | 74% | 80% | 80% | likely training-time regularization |
-| `rel0001` | 74%@K=1.47 | 74% | n/a | n/a | weaker |
-| `rel000` | 66% near K1 | 74% | n/a | n/a | no-margin target fails |
+These are the four available raw-MSE learned-halting checkpoints on the four
+core datasets.
 
-Main result to use for the dynamic-compute comparison:
+| Dataset | Checkpoint family | LeWM baseline | Fixed K1 | Fixed K4 | Best learned dynamic K | Notes |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Reacher | `ttjepa_reacher_dynamic_oracle_k4_10e` | 80% | 88%@K1.00 | 86%@K4.00 | 90%@K1.003 (`t=0.5`) | small learned dynamic gain |
+| Cube single | `ttjepa_cube_dynamic_oracle_k4_10e` | 72% | 78.00%@K1.00 | 77.33%@K4.00 | 81.33%@K1.13 (`t=0.5`, seeds 42/43/44) | strongest learned dynamic result |
+| Cube double | `ttjepa_cube_double_dynamic_oracle_k4_10e` | 66% | 72%@K1.00 | 70%@K4.00 | 72%@K1.003-1.020 (`t=0.35/0.5/0.7`) | matches K1; no depth gain |
+| Cube triple | `ttjepa_cube_triple_dynamic_oracle_k4_10e` | 74% | 70%@K1.00 | 78%@K4.00 | 74%@K1.40 (`t=0.001` diagnostic) | under-allocates depth; misses fixed K4 |
 
-```text
-rel00005: 78% success at mean K=1.064, compared with 74% LeWM and
-74% same-checkpoint fixed K1/K4. This is about 73.4% less transition-depth
-compute than always using K4.
-```
+Cube-single per-seed details from the depth-logged sweep:
 
-Result to discuss separately:
+| Mode | Seed 42 | Seed 43 | Seed 44 | Mean |
+| --- | ---: | ---: | ---: | ---: |
+| fixed K1 | 80%@K1.00 | 88%@K1.00 | 66%@K1.00 | 78.00%@K1.00 |
+| fixed K4 | 78%@K4.00 | 90%@K4.00 | 64%@K4.00 | 77.33%@K4.00 |
+| learned `t=0.5` | 86%@K1.10 | 92%@K1.11 | 66%@K1.16 | 81.33%@K1.13 |
 
-```text
-rel0005: K1, dynamic K, and K4 all reach 80%, suggesting a training-time
-regularization effect rather than a clean test-time compute allocation effect.
-```
+Cube-triple raw learned halt diagnosis:
+
+| Mode | Success | Mean K |
+| --- | ---: | ---: |
+| fixed K1 | 70% | 1.00 |
+| fixed K2 | 76% | 2.00 |
+| fixed K3 | 76% | 3.00 |
+| fixed K4 | 78% | 4.00 |
+| learned `t=0.35` | 72% | 1.0036 |
+| learned `t=0.5` | 70% | 1.0010 |
+| learned `t=0.7` | 72% | 1.0000 |
+| learned `t=0.001`, min-depth 1 | 74% | 1.4007 |
+
+Separate cube-triple joint-depth variants:
+
+| Run | Learned dynamic result | Fixed K1 sanity | Fixed K4 sanity | Notes |
+| --- | ---: | ---: | ---: | --- |
+| `rel00005` | 78%@K=1.064 | 74% | 74% | clean dynamic-compute result inside this variant |
+| `rel0002` | 78%@K=1.035 | 78% | 72% | avoids harmful over-refinement |
+| `rel0005` | 80%@K=1.000 to K=1.062 | 80% | 80% | likely training-time regularization |
+| `rel0001` | 74%@K=1.47 | n/a | n/a | weaker |
+| `rel000` | 66% near K1 | n/a | n/a | no-margin target fails |
 
 ## Current Paper Position
 
