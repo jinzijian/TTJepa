@@ -168,6 +168,91 @@ The main open analysis is to connect deeper refinement with planning decisions:
 - Does it preserve or smooth task-relevant contact details?
 - When does extra `K` help, do nothing, or hurt?
 
+## Appendix: Additional Experiment Ledger
+
+This appendix records completed runs that are useful for follow-up analysis but
+should not be merged into the main raw-MSE learned-head comparison above. The
+main paper story should remain the four-dataset raw-MSE dynamic-`K` result. The
+runs below either use planner-aware selection signals or different training
+losses, so they answer related but distinct questions.
+
+### Planner-Aware Selectors on Cube Triple
+
+These runs were evaluated on the cube-triple recurrent checkpoint where fixed
+`K1` is `70%` and fixed `K4` is `78%`. They test selection rules closer to
+planner behavior than raw next-latent MSE.
+
+| Selector family | Best / representative result | Interpretation |
+| --- | ---: | --- |
+| Learned planner selector | `80%@K2.53-2.63` (`t=0.38-0.41`) | Can exceed fixed K4, but uses substantially more depth than raw-MSE learned head |
+| Benefit-cost rule | `78%@K2.85` (`beta=0`) | Recovers fixed K4 success with lower mean depth than uniform K4 |
+| Cost-change rule | `78%@K3.38` (`alpha=0.25`) | Also recovers fixed K4 but is compute-heavy |
+| Rank-stability rule | `74%@K2.04-2.48` | Does not recover fixed K4 in this run |
+
+These are evidence that planner-aligned selection is promising. They are not
+part of the current main table because the paper's first version focuses on the
+simpler raw-MSE signal and its failure modes.
+
+### Cube Triple Joint-Depth Variants
+
+These variants change the training objective, so they are better treated as
+evidence for a separate training-time regularization story rather than the main
+dynamic test-time compute result.
+
+| Run | Fixed K1 | Fixed K4 | Best learned dynamic result | Readout |
+| --- | ---: | ---: | ---: | --- |
+| `rel00005` | 74% | 74% | `78%@K1.064` | Clean dynamic-compute gain inside this variant |
+| `rel0002` | 78% | 72% | `78%@K1.002-1.035` | Dynamic selection avoids harmful over-refinement |
+| `rel0005` | 80% | 80% | `80%@K1.000-1.062` | Stronger training effect; likely not a pure selector result |
+| `rel0001` | n/a | n/a | `74%@K1.47` | Weaker |
+| `rel000` | n/a | n/a | `66%` near K1 | No-margin target fails |
+
+The important note is that `rel0005` reaching `80%` at both fixed depths should
+be described as a training-time regularization effect, not as the headline
+dynamic-`K` result.
+
+### Cube Double Depth-Loss Variants
+
+These runs were started because cube double was the weakest main-table case for
+dynamic `K`. They show that changing the training objective can move the fixed
+depth behavior, but they do not give a cleaner raw-MSE dynamic-compute result
+than the main checkpoint.
+
+| Run | Fixed-depth behavior | Best learned dynamic result | Readout |
+| --- | --- | ---: | --- |
+| `finalonly_rel00005` | K1 46%, K2 60%, K3 62%, K4 70% | `76%@K3.53` | Improves success but spends near-deep compute; not a clean efficiency result |
+| `joint_marginal_rel00005` | K1 70%, K4 68% | `72%@K1.10-1.60` | Slight dynamic gain, still near the original cube-double ceiling |
+| `lightinter01_rel00005` | K1 76%, K4 68% | `72%@K1.15-1.57` | Shallow fixed K1 is strongest; dynamic selector does not improve it |
+
+For Paper 1, cube double should remain a negative or saturation case: the
+original raw-MSE learned selector correctly avoids spending much extra compute,
+but it does not discover a hidden deep-refinement gain.
+
+### Machine and Git Sync Notes
+
+The GitHub `main` branch contains this RefineJEPA README. The experiment
+machines may still show the original LeWM README when checked out on the
+development branch:
+
+```text
+codex/recurrent-lewm
+```
+
+On the new 8xA800 machine, `/vepfs/zijian/TTJepa` also contains local,
+uncommitted development artifacts:
+
+```text
+M jepa.py
+?? analysis/
+?? scripts/k_refinement_analysis.py
+?? scripts/k_smoothing_analysis.py
+?? scripts/train_planner_selector.py
+```
+
+Those files contain planner-selector and analysis work that has not been
+merged into `main`. Treat GitHub `main` as the current public documentation
+state, and treat `/vepfs/zijian/TTJepa` as the active experiment workspace.
+
 ## Files
 
 - [LEWM_REPRODUCTION_NOTES.md](LEWM_REPRODUCTION_NOTES.md): LeWM reproduction
