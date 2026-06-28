@@ -70,10 +70,10 @@ uses the recurrent RefineJEPA predictor stopped after its first refinement step.
 | Dataset / run | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Observation |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | Reacher seed42 | 80% | 88% | 86% | 86% | 86% | Extra depth is lower than K1 in this checkpoint |
-| Cube single seed42 | 72% | 80% | n/a | n/a | 78% | K4 is slightly lower than K1 |
-| Cube single seed43 | 72% | 88% | n/a | n/a | 90% | K4 improves over K1 by 2 points |
-| Cube single seed44 | 72% | 66% | n/a | n/a | 64% | K4 is slightly lower than K1 |
-| Cube single 3-seed avg | 72% | 78% | n/a | n/a | 77.3% | Average K4 is slightly lower, but seed43 shows K4 can help |
+| Cube single seed42 | 72% | 80% | 78% | 78% | 78% | Extra depth is slightly lower than K1 |
+| Cube single seed43 | 72% | 88% | 90% | 90% | 90% | Extra depth improves over K1 by 2 points |
+| Cube single seed44 | 72% | 66% | 66% | 62% | 64% | K2 matches K1; deeper K is lower |
+| Cube single 3-seed avg | 72% | 78% | 78% | 76.7% | 77.3% | Average K2 matches K1; K3/K4 are slightly lower, but seed43 shows extra depth can help |
 | Cube single original rerun `20260621_refixed_k1234` | 72% | 80% | 76% | 78% | 78% | K1 is best; K3/K4 recover to 78% |
 | Cube double original rerun `20260621_refixed_k1234` | 66% | 72% | 70% | 68% | 70% | Extra depth does not help in this run |
 | Cube triple original | 74% | 70% | 76% | 76% | 78% | Clearest setting where deeper K helps |
