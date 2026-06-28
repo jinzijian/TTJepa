@@ -83,6 +83,15 @@ more interesting: `K` changes planning success, but the useful depth is
 dataset- and checkpoint-dependent. This is exactly why dynamic allocation is
 the central question.
 
+![Fixed K success bars](analysis/readme_figures/fixed_k_success_bars.png)
+
+The fixed-depth picture is already enough to motivate dynamic test-time
+compute. Cube Triple is the cleanest positive setting for deeper transition
+refinement (`70% -> 78%` from `K1` to `K4`). Cube Double moves in the opposite
+direction, and Cube Single depends on checkpoint/seed. Thus the paper should
+not claim that deeper refinement is universally better; the correct claim is
+that `K` is a real compute axis whose utility must be allocated conditionally.
+
 ## Post-Hoc Raw Latent MSE Diagnostic
 
 The first analysis asks whether raw latent MSE can identify transitions that
@@ -112,6 +121,27 @@ Takeaways:
 - The weakness is planner alignment. Raw latent MSE measures representation
   error, while CEM cares about whether the predicted latent changes the selected
   action sequence.
+
+### Raw-MSE Allocation Confusion on Cube Triple
+
+The cube-triple outcome split makes the raw-MSE failure mode concrete. With
+the tolerance-0 post-hoc selector, raw MSE sends an episode to `K4` whenever
+the `K4` prediction has lower target-latent MSE than `K1`.
+
+![Cube Triple raw-MSE allocation confusion](analysis/readme_figures/cube_triple_raw_mse_allocation_confusion.png)
+
+Readout:
+
+- Raw MSE selects `K4` for `3/6` beneficial cases, so it contains real signal.
+- It selects `K4` for `17/33` redundant cases, spending most of its extra
+  compute where the planning outcome was already successful at `K1`.
+- It avoids both harmful cases in this run, but still misses half of the cases
+  where deeper refinement changes failure into success.
+
+This is the main diagnostic conclusion: raw latent MSE is not weak, but it is
+not the same as planning utility. The selector improves cube-triple from
+`70%@K1` to `76%@K2.32`, yet the outcome-based hindsight chooser reaches
+`82%@K1.36` because it continues on fewer but more valuable cases.
 
 ## Learned Dynamic K With Raw-MSE Supervision
 
@@ -192,6 +222,33 @@ planner behavior than raw next-latent MSE.
 These are evidence that planner-aligned selection is promising. They are not
 part of the current main table because the paper's first version focuses on the
 simpler raw-MSE signal and its failure modes.
+
+![Cube Triple planner alignment trace](analysis/readme_figures/cube_triple_planner_alignment_trace.png)
+
+The planner trace supports the same conclusion from another angle. The trace
+records top-30 CEM elite-set overlap between adjacent refinement depths and the
+relative improvement in top-30 candidate cost from evaluating the next depth.
+Many rollout calls already have very high elite overlap, yet their next-depth
+cost benefit can still be positive, negative, or nearly zero. A simple
+rank-stability rule therefore reaches only `74%@K2.04`, while a learned
+planner-feature selector reaches `80%@K2.59`.
+
+This is useful evidence for the paper's analysis section, but it is not yet the
+complete CEM-ranking figure. The current trace logs elite-overlap and top-k cost
+benefit; it does **not** yet log full candidate-rank Kendall tau or selected
+action changes. The stronger paper figure should add:
+
+- Kendall tau between the full `K1` and `K4` candidate-cost rankings.
+- Top-elite overlap by outcome category: beneficial, harmful, redundant, and
+  insufficient.
+- Whether the best selected candidate/action changes between `K1` and `K4`.
+- Whether beneficial cases correspond to ranking corrections and harmful cases
+  correspond to unfavorable ranking shifts.
+
+The target conclusion is sharper than "deeper K lowers MSE": the planner cares
+about candidate ordering and action selection. Raw latent MSE captures some
+prediction-improvement pressure, but planning utility depends on whether the
+refined latent rollout changes the CEM decision in the right direction.
 
 ### Cube Triple Joint-Depth Variants
 
