@@ -69,7 +69,7 @@ uses the recurrent RefineJEPA predictor stopped after its first refinement step.
 
 | Dataset / run | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Observation |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Reacher seed42 | 80% | 88% | n/a | n/a | 86% | K4 is worse than K1 in this checkpoint |
+| Reacher seed42 | 80% | 88% | 86% | 86% | 86% | Extra depth is lower than K1 in this checkpoint |
 | Cube single seed42 | 72% | 80% | n/a | n/a | 78% | K4 is slightly lower than K1 |
 | Cube single seed43 | 72% | 88% | n/a | n/a | 90% | K4 improves over K1 by 2 points |
 | Cube single seed44 | 72% | 66% | n/a | n/a | 64% | K4 is slightly lower than K1 |
@@ -87,10 +87,11 @@ the central question.
 
 The fixed-depth picture is already enough to motivate dynamic test-time
 compute. Cube Triple is the cleanest positive setting for deeper transition
-refinement (`70% -> 78%` from `K1` to `K4`). Cube Double moves in the opposite
-direction, and Cube Single depends on checkpoint/seed. Thus the paper should
-not claim that deeper refinement is universally better; the correct claim is
-that `K` is a real compute axis whose utility must be allocated conditionally.
+refinement (`70% -> 78%` from `K1` to `K4`). Reacher and Cube Double move in the
+opposite direction or saturate near `K1`, and Cube Single depends on
+checkpoint/seed. Thus the paper should not claim that deeper refinement is
+universally better; the correct claim is that `K` is a real compute axis whose
+utility must be allocated conditionally.
 
 ## Post-Hoc Raw Latent MSE Diagnostic
 
