@@ -16,6 +16,8 @@ which object matters for the goal, the imagined transition can need more
 refinement before the planner should trust it. RefineJEPA focuses on this
 transition-level compute axis.
 
+![Motivation: adaptive transition refinement](analysis/readme_figures/motivation_dynamic_transition_refinement.png)
+
 LeWM already performs latent model-predictive planning: it encodes observations
 and goals into a latent space, rolls out candidate action sequences, and uses
 CEM/MPC to choose the action sequence with the best goal-matching cost. RefineJEPA
