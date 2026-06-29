@@ -58,6 +58,8 @@ when another recurrent step meaningfully improves the next-latent prediction.
 At test time, a learned continue head predicts whether to keep refining, so the
 model does not need access to the true next observation.
 
+![Method: RefineJEPA dynamic K](analysis/readme_figures/method_refinejepa_dynamic_k.png)
+
 The goal is not to introduce a new action space, a new planner, or a new
 dataset-specific controller. The goal is to understand whether `K` is a useful
 test-time compute knob for JEPA latent planners.
