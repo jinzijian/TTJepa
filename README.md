@@ -87,6 +87,8 @@ more interesting: `K` changes planning success, but the useful depth is
 dataset- and checkpoint-dependent. This is exactly why dynamic allocation is
 the central question.
 
+![Main success versus LeWM](analysis/readme_figures/main_success_vs_lewm.png)
+
 ![Fixed K success bars](analysis/readme_figures/fixed_k_success_bars.png)
 
 The fixed-depth picture is already enough to motivate dynamic test-time
@@ -96,6 +98,14 @@ opposite direction or saturate near `K1`, and Cube Single depends on
 checkpoint/seed. Thus the paper should not claim that deeper refinement is
 universally better; the correct claim is that `K` is a real compute axis whose
 utility must be allocated conditionally.
+
+![K1/K4 outcome split](analysis/readme_figures/k1_k4_outcome_split.png)
+
+The paired `K1`/`K4` outcome split shows why uniform deep refinement is a poor
+default. Most episodes are either already solved by `K1` or remain unsolved at
+`K4`; only a small subset is genuinely helped by deeper refinement. Dynamic
+compute should identify that subset while avoiding redundant or harmful extra
+refinement.
 
 ## Post-Hoc Raw Latent MSE Diagnostic
 
@@ -126,6 +136,10 @@ Takeaways:
 - The weakness is planner alignment. Raw latent MSE measures representation
   error, while CEM cares about whether the predicted latent changes the selected
   action sequence.
+
+![Raw-MSE stopping Pareto](analysis/readme_figures/raw_mse_tolerance_pareto.png)
+
+![Raw-MSE precision and recall](analysis/readme_figures/raw_mse_precision_recall_failure.png)
 
 ### Raw-MSE Allocation Confusion on Cube Triple
 
@@ -228,6 +242,8 @@ These are evidence that planner-aligned selection is promising. They are not
 part of the current main table because the paper's first version focuses on the
 simpler raw-MSE signal and its failure modes.
 
+![Selector Pareto across signals](analysis/readme_figures/k_gating_pareto_all.png)
+
 ![Cube Triple planner alignment trace](analysis/readme_figures/cube_triple_planner_alignment_trace.png)
 
 The planner trace supports the same conclusion from another angle. The trace
@@ -254,6 +270,27 @@ The target conclusion is sharper than "deeper K lowers MSE": the planner cares
 about candidate ordering and action selection. Raw latent MSE captures some
 prediction-improvement pressure, but planning utility depends on whether the
 refined latent rollout changes the CEM decision in the right direction.
+
+### Latent Smoothing / Representation Checks
+
+These diagnostics were generated to test a possible failure explanation: deeper
+refinement might improve global latent MSE while smoothing away task-relevant
+details. The current broad readout is conservative. The global latent spectrum
+and linear state-probe quality are almost unchanged between `K1` and `K4`, so
+the existing evidence does not support a broad representation-collapse story.
+The remaining failure mode is more likely local and planner-facing: refinement
+can change candidate ordering or action choice in ways that raw latent MSE does
+not fully capture.
+
+![Latent spectrum K1 versus K4](analysis/readme_figures/spectrum_k1_vs_k4_scatter.png)
+
+![Latent spectrum K4/K1 ratio](analysis/readme_figures/spectrum_k4_k1_ratio.png)
+
+![State-probe R2 K1 versus K4](analysis/readme_figures/probe_r2_k1_vs_k4_scatter.png)
+
+![State-probe R2 delta](analysis/readme_figures/probe_r2_delta_k4_k1.png)
+
+![Outcome-subset probe MSE K1 versus K4](analysis/readme_figures/category_probe_mse_k1_vs_k4_scatter.png)
 
 ### Cube Triple Joint-Depth Variants
 
