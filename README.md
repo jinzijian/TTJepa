@@ -1,105 +1,217 @@
-# RefineJEPA
-### Dynamic test-time transition refinement for LeWM-style latent planning
+# RefineJEPA: Dynamic K for JEPA Latent Planning
 
-RefineJEPA is a research fork of
-[LeWorldModel (LeWM)](https://github.com/lucas-maes/le-wm). The project studies
-one question:
+中文说明见 [README.zh-CN.md](README.zh-CN.md).
 
-> Can a latent world-model planner decide how much computation each imagined
-> transition deserves, instead of using the same transition-model depth
-> everywhere?
+RefineJEPA studies **dynamic test-time compute** inside JEPA-style latent
+world-model planning. Instead of using the same transition-model depth for
+every imagined transition, RefineJEPA learns when an imagined transition should
+receive additional recurrent refinement.
 
-The motivating example is simple. When a robot moves its hand through free
-space toward an object, the dynamics are usually easy and one transition-model
-pass may be enough. When the robot makes contact, lifts the object, or resolves
-which object matters for the goal, the imagined transition can need more
-refinement before the planner should trust it. RefineJEPA focuses on this
-transition-level compute axis.
+The current working question is simple:
+
+> In latent MPC/CEM planning, which imagined transitions are worth refining
+> more deeply?
+
+This repository is the RefineJEPA / TTJepa code and experiment ledger. The
+local source tree contains the recurrent transition predictor, learned
+continue-head training, evaluation hooks, and paper-facing result records. The
+large-scale training and evaluation runs are executed on the remote TTJepa
+workspace:
+
+- remote: `ssh -p 20747 root@115.190.235.210`
+- repo: `/vepfs/zijian/TTJepa`
+- data/results: `/vepfs/zijian/lewm_data`
+- branch: `codex/recurrent-lewm`
+
+The original LeWM README content has been preserved in
+[LEWM_REPRODUCTION_NOTES.md](LEWM_REPRODUCTION_NOTES.md). This README is the
+RefineJEPA-first project entrypoint.
+
+## Motivation
+
+Consider a robot reaching for an object. Moving the arm through free space is
+often easy to predict: a shallow latent transition is enough. But the moment of
+contact, lifting, sliding, or multi-object interaction can be planning-critical:
+a small dynamics error can change the selected action. A latent planner should
+therefore spend little compute on easy imagined transitions and more compute on
+transitions whose refinement can affect the planner's decision.
 
 ![Motivation: adaptive transition refinement](analysis/readme_figures/motivation_dynamic_transition_refinement.png)
 
-LeWM already performs latent model-predictive planning: it encodes observations
-and goals into a latent space, rolls out candidate action sequences, and uses
-CEM/MPC to choose the action sequence with the best goal-matching cost. RefineJEPA
-keeps this planning setup fixed and changes the transition predictor into a
-weight-tied recurrent predictor with a variable refinement depth `K`.
+RefineJEPA focuses on this transition-level compute axis:
 
-## Status
+- standard latent planning spends compute on CEM sampling width, CEM
+  iterations, or rollout horizon;
+- RefineJEPA spends compute inside each imagined latent transition through
+  recurrent refinement depth \(K\);
+- dynamic \(K\) chooses the depth per imagined transition rather than applying a
+  fixed depth everywhere.
 
-- Base code: LeWM-style JEPA latent planner.
-- Method code: active development branch `codex/recurrent-lewm`.
-- Paper direction: dynamic test-time compute through transition refinement depth
-  `K`.
-- Main v0 signal: raw latent MSE improvement, used both as a diagnostic and as
-  supervision for a learned continue head.
+## Method Summary
 
-This README records the current research story and experiment state. The
-original LeWM reproduction notes are kept in
-[LEWM_REPRODUCTION_NOTES.md](LEWM_REPRODUCTION_NOTES.md).
-
-## Method
-
-RefineJEPA studies the transition predictor inside latent planning:
-
-```text
-z_hat[t+1]^(1) -> z_hat[t+1]^(2) -> ... -> z_hat[t+1]^(K)
-```
-
-There are two evaluation modes:
-
-1. Fixed `K`: every imagined transition uses the same depth, such as `K=1`,
-   `K=2`, or `K=4`.
-2. Dynamic `K`: the predictor decides whether another recurrent refinement step
-   is worth paying for.
-
-For the current paper draft, the dynamic rule is intentionally simple. During
-training, raw latent MSE improvement defines the stop/continue target: continue
-when another recurrent step meaningfully improves the next-latent prediction.
-At test time, a learned continue head predicts whether to keep refining, so the
-model does not need access to the true next observation.
+RefineJEPA starts from LeWM-style latent planning: encode the current visual
+observation and goal, roll out candidate action sequences in latent space, and
+use CEM to choose the action sequence with the best terminal goal-matching
+cost. The outer planner is unchanged. RefineJEPA changes only the transition
+predictor.
 
 ![Method: RefineJEPA dynamic K](analysis/readme_figures/method_refinejepa_dynamic_k.png)
 
-The goal is not to introduce a new action space, a new planner, or a new
-dataset-specific controller. The goal is to understand whether `K` is a useful
-test-time compute knob for JEPA latent planners.
+The transition model is a weight-tied recurrent predictor. At each imagined
+transition it produces predictions
 
-## Main Experiment Record
+\[
+\hat z_{t+1}^{(1)}, \hat z_{t+1}^{(2)}, \ldots, \hat z_{t+1}^{(K_{\max})}.
+\]
 
-The table below separates the original LeWM baseline from recurrent fixed-depth
-RefineJEPA checkpoints. `LeWM baseline` and `Fixed K1` are not the same model:
-LeWM uses the original non-recurrent transition predictor, while fixed `K1`
-uses the recurrent RefineJEPA predictor stopped after its first refinement step.
+A lightweight continue head predicts whether another refinement step is worth
+executing. The main learned dynamic-\(K\) experiments train this head with a
+relative marginal MSE target:
 
-| Dataset / run | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Observation |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Reacher seed42 | 80% | 88% | 86% | 86% | 86% | Extra depth is lower than K1 in this checkpoint |
-| Cube single seed42 | 72% | 80% | 78% | 78% | 78% | Extra depth is slightly lower than K1 |
-| Cube single seed43 | 72% | 88% | 90% | 90% | 90% | Extra depth improves over K1 by 2 points |
-| Cube single seed44 | 72% | 66% | 66% | 62% | 64% | K2 matches K1; deeper K is lower |
-| Cube single 3-seed avg | 72% | 78% | 78% | 76.7% | 77.3% | Average K2 matches K1; K3/K4 are slightly lower, but seed43 shows extra depth can help |
-| Cube single original rerun `20260621_refixed_k1234` | 72% | 80% | 76% | 78% | 78% | K1 is best; K3/K4 recover to 78% |
-| Cube double original rerun `20260621_refixed_k1234` | 66% | 72% | 70% | 68% | 70% | Extra depth does not help in this run |
-| Cube triple original | 74% | 70% | 76% | 76% | 78% | Clearest setting where deeper K helps |
+\[
+y_k =
+\mathbb{I}
+\left[
+\frac{e_k - e_{k+1}}{e_k+\epsilon}
+>
+\tau_{\mathrm{rel}}
+\right],
+\qquad
+\tau_{\mathrm{rel}}=5\times10^{-4}.
+\]
 
-The accurate conclusion is not that deeper `K` is always better. The result is
-more interesting: `K` changes planning success, but the useful depth is
-dataset- and checkpoint-dependent. This is exactly why dynamic allocation is
-the central question.
+Here \(e_k\) is the raw latent MSE at refinement depth \(k\), computed against
+the observed next latent during training. At test time, the future latent is not
+available: the model stops using only the learned continue head. We sweep the
+test-time continue threshold \(\eta\) and report the best success/compute point.
+
+Main configuration for the learned dynamic-\(K\) runs:
+
+| Setting | Value |
+| --- | ---: |
+| Max refinement depth | \(K_{\max}=4\) |
+| Halt label mode | relative marginal MSE improvement |
+| \(\tau_{\mathrm{rel}}\) | \(5\times10^{-4}\) |
+| Continue-head loss weight | \(0.2\) |
+| Minimum depth | \(1\) |
+
+Mean \(K\) always denotes the average selected refinement depth over all CEM
+imagined transition predictions, not a fractional per-transition depth. Internally
+each transition still uses an integer depth in \(\{1,2,3,4\}\).
+
+## Implementation Details: Continue Head, Actions, and CEM
+
+**What supervision trains the latent continue head?** The learned dynamic-\(K\)
+head is trained from relative marginal raw latent-MSE improvement. During
+training, the predictor runs all refinement depths and compares each prediction
+to the observed next latent. The continue label at depth \(k\) is 1 when one
+more refinement step reduces MSE by more than a small relative margin:
+
+\[
+y_k =
+\mathbb{I}
+\left[
+\frac{e_k - e_{k+1}}{e_k+\epsilon}
+>
+5\times 10^{-4}
+\right].
+\]
+
+At evaluation time, the future target latent is unavailable. The model uses
+only the learned continue head to decide whether to stop or refine.
+
+**Is the transition layer an MLP or a transformer?** The transition predictor is
+a recurrent, action-conditioned transformer predictor. It has:
+
+- a base action-conditioned transformer with `base_depth=2`;
+- a shared recurrent refinement cell with `refine_depth=1`;
+- a linear `init_head` for the initial prediction;
+- linear `delta_head` and `gamma_head` for residual latent updates;
+- a linear `continue_head` for stop/continue prediction.
+
+The refinement cell is weight-tied across depths. Increasing \(K\) reuses the
+same cell multiple times; it does not create a deeper untied model.
+
+**What is the continue head structure?** The continue head itself is a linear
+classifier:
+
+\[
+p_k=\sigma(W h_k+b).
+\]
+
+It is not an MLP or transformer. The reason this can still be expressive is
+that \(h_k\) is already produced by action-conditioned transformer/refinement
+blocks and contains the transition history, candidate action context, and the
+current refinement feedback.
+
+**How is it based on action?** Raw actions are first encoded by an action
+encoder into action embeddings. Those embeddings condition both the base
+transformer and every recurrent refinement cell through conditional transformer
+blocks. Therefore the continue head reads \(h_k\), but \(h_k\) is already
+conditioned on the candidate action sequence:
+
+\[
+p(\mathrm{continue})
+=
+g(h_k),
+\qquad
+h_k = F(h_{k-1}, z_{\mathrm{hist}}, a_{\mathrm{hist}}, \hat z^{(k-1)}-z_{\mathrm{anchor}}).
+\]
+
+Thus different CEM candidate action sequences can produce different hidden
+states and different selected depths.
+
+**How are actions sampled?** At test time, the CEM planner samples many
+candidate action sequences from a Gaussian action distribution. Each candidate
+sequence is rolled out in latent space with the transition predictor. After the
+rollout, the planner scores the candidate by terminal goal-matching cost: the
+MSE distance between the predicted terminal latent and the goal latent. CEM
+then keeps the low-cost elite candidates and updates the Gaussian distribution
+toward them. This repeats for several CEM iterations, and the first action of
+the best final sequence is executed.
+
+This action sampling and elite update procedure is evaluation-time planning,
+not training-time supervision. Training only sees dataset transitions and the
+latent prediction / continue-head losses.
+
+## Main Learned Dynamic-K Results
+
+The table below is the current main result. It uses the relative-improvement
+continue target with \(\tau_{\mathrm{rel}}=0.0005\) across all four datasets.
+In discussion we refer to this setting as `rel0005`; the remote artifact
+directories for this four-dataset sweep are named `rel00005`. Fixed \(K\) rows
+and learned dynamic rows are evaluated within the same checkpoint family.
+
+| Dataset | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Best learned dynamic K |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** \((\eta=0.45)\) |
+| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** \((\eta=0.70)\) |
+| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** \((\eta=0.50)\) |
+| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** \((\eta=0.50)\) |
+
+Interpretation:
+
+- Reacher, Cube Double, and Cube Triple improve over the best fixed-depth
+  baseline while using near-\(K=1\) average compute.
+- Cube Single is the useful negative/control case: this checkpoint's best fixed
+  depth is already \(K=1\), and the learned selector correspondingly keeps
+  almost everything at \(K=1\).
+- The main claim is not "deeper is always better." The claim is that transition
+  depth is a real compute axis and should be allocated dynamically.
+
+This table supersedes the older `ttjepa_*_dynamic_oracle_k4_10e` learned-head
+sweep. That earlier sweep used raw target-MSE depth labels and is kept as a
+historical comparison in the experiment ledger.
 
 ![Main success versus LeWM](analysis/readme_figures/main_success_vs_lewm.png)
 
+## Fixed-Depth and Outcome Analysis
+
+Fixed-depth evaluation motivates the dynamic-compute question directly: useful
+depth is task- and checkpoint-dependent, so a uniform fixed \(K\) is the wrong
+interface.
+
 ![Fixed K success bars](analysis/readme_figures/fixed_k_success_bars.png)
-
-The fixed-depth picture is already enough to motivate dynamic test-time
-compute. Cube Triple is the cleanest positive setting for deeper transition
-refinement (`70% -> 78%` from `K1` to `K4`). Reacher and Cube Double move in the
-opposite direction or saturate near `K1`, and Cube Single depends on
-checkpoint/seed. Thus the paper should not claim that deeper refinement is
-universally better; the correct claim is that `K` is a real compute axis whose
-utility must be allocated conditionally.
-
-![K1/K4 outcome split](analysis/readme_figures/k1_k4_outcome_split.png)
 
 The paired `K1`/`K4` outcome split shows why uniform deep refinement is a poor
 default. Most episodes are either already solved by `K1` or remain unsolved at
@@ -107,35 +219,54 @@ default. Most episodes are either already solved by `K1` or remain unsolved at
 compute should identify that subset while avoiding redundant or harmful extra
 refinement.
 
-## Post-Hoc Raw Latent MSE Diagnostic
+![K1/K4 outcome split](analysis/readme_figures/k1_k4_outcome_split.png)
 
-The first analysis asks whether raw latent MSE can identify transitions that
-benefit from deeper refinement. This is not a deployable learned policy. It is
-a post-hoc teacher diagnostic: after evaluating fixed depths, it uses the true
-next latent to measure whether deeper refinement reduced prediction error, then
-asks how well that signal would select between shallow and deeper outcomes.
+## Depth Allocation Statistics
 
-This table should not be read as the same experiment as the learned-head table
-below. It uses observed target-latent MSE after the fact; the learned-head table
-uses a trained continue head at inference time and does not see the target
-latent.
+The best learned dynamic policies spend extra compute on only a small subset of
+imagined transitions.
 
-| Dataset | Fixed K1 | Fixed K4 | Best post-hoc raw-MSE selector | Hindsight K1/K4 chooser | Depth-helped cases |
+| Dataset | Best dynamic | K=1 | K=2 | K=3 | K=4 | Refined beyond K1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Reacher | 86%@K1.08 | 92.19% | 7.65% | 0.16% | 0.007% | 7.81% |
+| Cube Single | 84%@K1.00 | 99.987% | 0.013% | 0% | 0% | 0.013% |
+| Cube Double | 72%@K1.10 | 91.20% | 7.95% | 0.78% | 0.070% | 8.80% |
+| Cube Triple | 78%@K1.06 | 95.20% | 3.24% | 1.50% | 0.049% | 4.80% |
+
+![Depth allocation](figures/depth_allocation_rel00005.png)
+
+We also trace where extra refinement is spent inside each CEM rollout. The
+location is not uniform. For example, Cube Triple refines most often in the
+first imagined transition and progressively less later in the rollout.
+
+![Depth by rollout step](figures/depth_by_rollout_step_rel00005.png)
+
+The selected extra depth is mostly \(K=2\), with rare \(K=3/K=4\) use.
+
+![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
+
+## Raw Latent MSE Diagnostic
+
+Before training the continue head, we used raw target-latent MSE as a post-hoc
+diagnostic: after fixed-depth evaluation, compare true target-latent errors at
+different depths and choose whether shallow or deeper prediction should have
+been used. This is not deployable because it uses future target information,
+but it measures whether raw latent error contains useful allocation signal.
+
+| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
-| Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
-| Cube double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
-| Cube triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
+| Cube Single | 78.0%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
+| Cube Double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
+| Cube Triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
 
 Takeaways:
 
-- Raw latent MSE is a reasonable v0 signal, not a dead end. On cube-triple it
-  recovers a real part of the fixed-depth gain: `70% -> 76%` at mean `K=2.32`.
-- It still does not reach fixed `K4` (`78%`) or the hindsight chooser
-  (`82%@K1.36`), so raw latent MSE is useful but incomplete.
-- The weakness is planner alignment. Raw latent MSE measures representation
-  error, while CEM cares about whether the predicted latent changes the selected
-  action sequence.
+- Raw latent MSE is a useful first signal: on Cube Triple it improves from
+  70%@K1 to 76%@K2.32.
+- It remains incomplete: it does not reach fixed K4 or the outcome upper bound.
+- The gap motivates the learned continue head and later planner-alignment
+  analyses.
 
 ![Raw-MSE stopping Pareto](analysis/readme_figures/raw_mse_tolerance_pareto.png)
 
@@ -143,9 +274,9 @@ Takeaways:
 
 ### Raw-MSE Allocation Confusion on Cube Triple
 
-The cube-triple outcome split makes the raw-MSE failure mode concrete. With
-the tolerance-0 post-hoc selector, raw MSE sends an episode to `K4` whenever
-the `K4` prediction has lower target-latent MSE than `K1`.
+The cube-triple outcome split makes the raw-MSE failure mode concrete. With the
+tolerance-0 post-hoc selector, raw MSE sends an episode to `K4` whenever the
+`K4` prediction has lower target-latent MSE than `K1`.
 
 ![Cube Triple raw-MSE allocation confusion](analysis/readme_figures/cube_triple_raw_mse_allocation_confusion.png)
 
@@ -162,68 +293,64 @@ not the same as planning utility. The selector improves cube-triple from
 `70%@K1` to `76%@K2.32`, yet the outcome-based hindsight chooser reaches
 `82%@K1.36` because it continues on fewer but more valuable cases.
 
-## Learned Dynamic K With Raw-MSE Supervision
+## Mechanistic Analysis
 
-The learned version uses the same raw-MSE idea as training supervision. Each
-recurrent state predicts whether another refinement step should be taken. At
-evaluation time, the continue head chooses the depth automatically.
+We tested whether deeper recurrent refinement simply causes global latent
+smoothing or collapse. The first pass does not support that explanation.
 
-This is the deployable version of the idea, but it is a different experiment
-from the post-hoc diagnostic above. It uses raw-MSE-derived labels during
-training, then relies on the model's predicted continue probability at test
-time. Because the selector is learned and the checkpoints differ, the numbers
-are not expected to exactly match the post-hoc teacher selector.
+Artifacts: `analysis/k_smoothing_20260622`.
 
-The four-dataset learned-head sweep is below. These rows come from the
-`ttjepa_*_dynamic_oracle_k4_10e` checkpoints, where the continue target is built
-from raw latent-MSE depth labels.
+![Spectrum K1 vs K4](analysis/k_smoothing_20260622/figures/spectrum_k1_vs_k4_scatter.png)
 
-| Dataset | LeWM baseline | Fixed K1 | Fixed K4 | Best learned dynamic K | Interpretation |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Reacher | 80% | 88%@K1.00 | 86%@K4.00 | 90%@K1.003 (`t=0.5`) | Dynamic head slightly beats both fixed depths while using near-K1 compute |
-| Cube single | 72% | 78.00%@K1.00 | 77.33%@K4.00 | 81.33%@K1.13 (`t=0.5`, 3 seeds) | Strongest clean learned dynamic-K result |
-| Cube double | 66% | 72%@K1.00 | 70%@K4.00 | 72%@K1.003-1.020 (`t=0.35/0.5/0.7`) | Matches K1; no evidence that extra depth helps this checkpoint |
-| Cube triple | 74% | 70%@K1.00 | 78%@K4.00 | 74%@K1.40 (`t=0.001` diagnostic) | Raw learned halt under-allocates depth and misses the K4 gain |
+![Probe R2 K1 vs K4](analysis/k_smoothing_20260622/figures/probe_r2_k1_vs_k4_scatter.png)
 
-The main readout is mixed but useful. Cube single is the clearest positive
-learned dynamic result: `81.33%` at mean `K=1.13`, compared with `78.00%` fixed
-K1 and `77.33%` fixed K4. Reacher also has a small positive learned result.
-Cube double mostly says "do not spend compute." Cube triple exposes the main
-failure mode: fixed K4 is useful, but the raw-MSE learned halt head mostly stops
-near K1, so it loses the deeper-refinement gain.
+![Category probe MSE K1 vs K4](analysis/k_smoothing_20260622/figures/category_probe_mse_k1_vs_k4_scatter.png)
 
-There is also a later cube-triple joint-depth variant (`rel00005`, `rel0002`,
-`rel0005`, etc.) where the best clean dynamic result reaches `78%@K=1.064`, and
-one stronger training variant reaches `80%` at all depths. That batch is useful
-for studying training-time regularization, but it is not the four-dataset
-raw-MSE learned-head sweep above.
+Observed result:
 
-## Analysis Direction
+- Global latent spectrum barely changes from K1 to K4.
+- Linear state probes are also nearly unchanged.
+- Depth-helped and depth-hurt subsets do not show a clean global-collapse
+  signature.
 
-The current paper story should stay focused:
+This suggests the remaining failure mode is more local: extra refinement matters
+when it changes CEM candidate ranking or selected actions, not necessarily when
+it changes broad latent-spectrum statistics.
 
-1. Fixed-depth analysis shows that no single `K` is uniformly best.
-2. Raw latent MSE is a useful first signal for dynamic `K`, especially on
-   cube-triple.
-3. A learned continue head can turn this signal into a deployable dynamic
-   test-time compute mechanism.
-4. Failure analysis explains why latent MSE is incomplete: it is not identical
-   to planner benefit.
+## Future Work: Planner-Aware Continue Supervision
 
-The main open analysis is to connect deeper refinement with planning decisions:
+The current continue head learns from latent prediction improvement. A natural
+next step is to train the same lightweight head with a more planner-aware
+teacher signal.
 
-- Does `K` reduce latent prediction error?
-- Does it improve CEM candidate ranking?
-- Does it preserve or smooth task-relevant contact details?
-- When does extra `K` help, do nothing, or hurt?
+The earlier CEM-aware diagnostic did this offline: for the same CEM candidate
+set, it evaluated costs at \(K=1,2,3,4\), constructed features from top-k cost
+statistics and elite-ranking changes, and trained a separate MLP selector to
+predict whether deeper \(K\) improves planner cost. This was useful evidence
+that CEM ranking contains allocation signal, but it was not integrated into the
+transition predictor and did not provide a cheap deployable stopping rule.
+
+The cleaner future variant is:
+
+1. During training, sample a small set of candidate action sequences.
+2. Roll them out at multiple depths.
+3. Use top-k CEM cost improvement or elite-ranking change to create a
+   planner-aware continue label.
+4. Train the existing `continue_head(h_k)` with this label while keeping the
+   planner-derived label stop-gradient.
+5. At evaluation time, still use only the cheap latent continue head.
+
+This would distill an expensive CEM-aware teacher into the transition-level
+head. The goal is to replace "does one more step reduce latent MSE?" with the
+more planner-aligned question: "does one more step improve the candidate
+ranking or action selection that CEM actually uses?"
 
 ## Appendix: Additional Experiment Ledger
 
 This appendix records completed runs that are useful for follow-up analysis but
-should not be merged into the main raw-MSE learned-head comparison above. The
-main paper story should remain the four-dataset raw-MSE dynamic-`K` result. The
-runs below either use planner-aware selection signals or different training
-losses, so they answer related but distinct questions.
+should not be merged into the main four-dataset learned dynamic-\(K\)
+comparison above. The runs below either use planner-aware selection signals or
+different training losses, so they answer related but distinct questions.
 
 ### Planner-Aware Selectors on Cube Triple
 
@@ -239,8 +366,8 @@ planner behavior than raw next-latent MSE.
 | Rank-stability rule | `74%@K2.04-2.48` | Does not recover fixed K4 in this run |
 
 These are evidence that planner-aligned selection is promising. They are not
-part of the current main table because the paper's first version focuses on the
-simpler raw-MSE signal and its failure modes.
+part of the current main table because the first paper version focuses on the
+simpler latent-MSE signal and its failure modes.
 
 ![Selector Pareto across signals](analysis/readme_figures/k_gating_pareto_all.png)
 
@@ -255,9 +382,7 @@ rank-stability rule therefore reaches only `74%@K2.04`, while a learned
 planner-feature selector reaches `80%@K2.59`.
 
 This is useful evidence for the paper's analysis section, but it is not yet the
-complete CEM-ranking figure. The current trace logs elite-overlap and top-k cost
-benefit; it does **not** yet log full candidate-rank Kendall tau or selected
-action changes. The stronger paper figure should add:
+complete CEM-ranking figure. The stronger paper figure should add:
 
 - Kendall tau between the full `K1` and `K4` candidate-cost rankings.
 - Top-elite overlap by outcome category: beneficial, harmful, redundant, and
@@ -308,14 +433,14 @@ dynamic test-time compute result.
 
 The important note is that `rel0005` reaching `80%` at both fixed depths should
 be described as a training-time regularization effect, not as the headline
-dynamic-`K` result.
+dynamic-\(K\) result.
 
 ### Cube Double Depth-Loss Variants
 
 These runs were started because cube double was the weakest main-table case for
-dynamic `K`. They show that changing the training objective can move the fixed
-depth behavior, but they do not give a cleaner raw-MSE dynamic-compute result
-than the main checkpoint.
+dynamic \(K\). They show that changing the training objective can move the
+fixed-depth behavior, but they do not give a cleaner learned dynamic-compute
+result than the main checkpoint.
 
 | Run | Fixed-depth behavior | Best learned dynamic result | Readout |
 | --- | --- | ---: | --- |
@@ -323,9 +448,10 @@ than the main checkpoint.
 | `joint_marginal_rel00005` | K1 70%, K4 68% | `72%@K1.10-1.60` | Slight dynamic gain, still near the original cube-double ceiling |
 | `lightinter01_rel00005` | K1 76%, K4 68% | `72%@K1.15-1.57` | Shallow fixed K1 is strongest; dynamic selector does not improve it |
 
-For Paper 1, cube double should remain a negative or saturation case: the
-original raw-MSE learned selector correctly avoids spending much extra compute,
-but it does not discover a hidden deep-refinement gain.
+For Paper 1, cube double should remain a saturation case in the older
+checkpoint family: the original raw-MSE learned selector correctly avoids
+spending much extra compute, but it does not discover a hidden deep-refinement
+gain.
 
 ### Machine and Git Sync Notes
 
@@ -352,26 +478,73 @@ Those files contain planner-selector and analysis work that has not been
 merged into `main`. Treat GitHub `main` as the current public documentation
 state, and treat `/vepfs/zijian/TTJepa` as the active experiment workspace.
 
-## Files
+## Experiment Ledger
 
-- [LEWM_REPRODUCTION_NOTES.md](LEWM_REPRODUCTION_NOTES.md): LeWM reproduction
-  environment, dataset paths, and baseline results.
-- [README.zh-CN.md](README.zh-CN.md): Chinese project summary.
-- [EXPERIMENT_RESULTS.md](EXPERIMENT_RESULTS.md): compact result ledger for the
-  current RefineJEPA experiments.
-- Method implementation notes and active code live on the development branch
-  `codex/recurrent-lewm`.
+Full experiment records, including paths, logs, exploratory alternatives, and
+older checkpoint families, are kept in:
 
-## Codebase Lineage
+- [TTJEPA_EXPERIMENT_RESULTS.md](TTJEPA_EXPERIMENT_RESULTS.md)
+- [TTJEPA_DYNAMIC_K_RESEARCH.md](TTJEPA_DYNAMIC_K_RESEARCH.md)
+- [paper.md](paper.md)
 
-This repository is based on LeWM. Please cite the original LeWM work when using
-the base world-model code:
+Important local artifacts:
 
-```bibtex
-@article{maes_lelidec2026lewm,
-  title={LeWorldModel: Stable End-to-End Joint-Embedding Predictive Architecture from Pixels},
-  author={Maes, Lucas and Le Lidec, Quentin and Scieur, Damien and LeCun, Yann and Balestriero, Randall},
-  journal={arXiv preprint},
-  year={2026}
-}
+- `analysis/readme_figures/`
+- `analysis/k_refinement_all_20260620_024634/`
+- `analysis/k_smoothing_20260622/`
+- `analysis/paper1_figures/`
+- `figures/depth_allocation_rel00005.png`
+- `figures/depth_by_rollout_step_rel00005.png`
+- `figures/depth_by_rollout_step_stacked_rel00005.png`
+
+Important remote result directories:
+
+- `/vepfs/zijian/lewm_data/ttjepa_reacher_joint_marginal_rel00005_k4_10e`
+- `/vepfs/zijian/lewm_data/ttjepa_cube_joint_marginal_rel00005_k4_10e`
+- `/vepfs/zijian/lewm_data/ttjepa_cube_double_joint_marginal_rel00005_k4_10e`
+- `/vepfs/zijian/lewm_data/ttjepa_cube_triple_joint_marginal_rel00005_k4_10e`
+
+Naming note: the main result above is the \(\tau_{\mathrm{rel}}=0.0005\)
+four-dataset sweep. Some older notes abbreviate this setting as `rel0005`.
+The remote directory spelling is `rel00005`. A separate cube-triple-only
+directory named `rel0005` also exists and is treated as an auxiliary
+training-variant record in the experiment ledger, not the four-dataset main
+table.
+
+## Repository Layout
+
+Current high-level organization:
+
+```text
+.
+├── README.md                         # RefineJEPA project entrypoint
+├── README.zh-CN.md                   # Chinese project notes
+├── TTJEPA_EXPERIMENT_RESULTS.md      # Full experiment ledger
+├── TTJEPA_DYNAMIC_K_RESEARCH.md      # Working research notes
+├── paper.md                          # Paper outline / claim boundary notes
+├── jepa.py                           # JEPA model and rollout/eval hooks
+├── module.py                         # recurrent predictor and continue head
+├── recurrent_halting.py              # continue-label construction
+├── train.py                          # training losses and logging
+├── eval.py                           # CEM/MPC evaluation entrypoint
+├── config/                           # train/eval Hydra configs
+├── analysis/                         # local analysis figures copied for README/paper
+└── figures/                          # main paper/README figures
 ```
+
+## Cleanup Roadmap
+
+The next repo cleanup pass should be:
+
+1. Keep README focused on the current RefineJEPA paper story.
+2. Keep long experiment tables, failed variants, and path-heavy records in
+   [TTJEPA_EXPERIMENT_RESULTS.md](TTJEPA_EXPERIMENT_RESULTS.md).
+3. Keep LeWM reproduction instructions in
+   [LEWM_REPRODUCTION_NOTES.md](LEWM_REPRODUCTION_NOTES.md).
+4. Move any stale temporary scripts or caches out of the tracked source tree.
+
+## Citation / Provenance
+
+This work builds on JEPA-style latent world models and LeWM-style latent
+planning. RefineJEPA modifies the LeWM transition predictor and test-time
+planning path to study dynamic recurrent refinement depth \(K\).
