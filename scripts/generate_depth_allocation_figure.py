@@ -143,12 +143,12 @@ def main():
     draw_legend(draw, 660, 150)
 
     left = (210, 245, 930, 750)
-    right = (1100, 245, 1650, 750)
+    right = (1100, 245, 1665, 750)
     draw_center(draw, ((left[0] + left[2]) / 2, 215), "All selected depths", F_PANEL)
     draw_center(draw, ((right[0] + right[2]) / 2, 215), "Zoom: transitions refined beyond K=1", F_PANEL)
 
     lx = grid(draw, left, 100, [0, 20, 40, 60, 80, 100])
-    rx = grid(draw, right, 10, [0, 2, 4, 6, 8, 10])
+    rx = grid(draw, right, 12, [0, 2, 4, 6, 8, 10, 12])
     bar_h = 56
     row_gap = 96
     y_start = 292
@@ -166,21 +166,12 @@ def main():
             anchor="rm",
         )
 
-        draw_stacked_bar(draw, right[0], y, right[2] - right[0], bar_h, row["k"], 10, include_k1=False)
-        label = f"{row['deepened']:.2f}% refined beyond K=1"
+        draw_stacked_bar(draw, right[0], y, right[2] - right[0], bar_h, row["k"], 12, include_k1=False)
+        label = f"{row['deepened']:.2f}%"
         if row["deepened"] < 0.05:
             draw.text((right[0] + 18, center_y), label, font=F_SMALL_BOLD, fill=COLORS["muted"], anchor="lm")
-        elif row["deepened"] > 7.0:
-            box_w = 258
-            draw.rounded_rectangle(
-                (right[2] - box_w, center_y - 19, right[2] - 8, center_y + 19),
-                radius=8,
-                fill="white",
-                outline="#cbd5e1",
-            )
-            draw.text((right[2] - 18, center_y), label, font=F_SMALL_BOLD, fill=COLORS["text"], anchor="rm")
         else:
-            x_label = min(rx(row["deepened"]) + 18, right[2] + 12)
+            x_label = min(rx(row["deepened"]) + 14, right[2] - 4)
             draw.text((x_label, center_y), label, font=F_SMALL_BOLD, fill=COLORS["text"], anchor="lm")
 
     draw_center(draw, ((left[0] + left[2]) / 2, 830), "Fraction of imagined transitions (%)", F_AXIS, COLORS["axis"])
