@@ -159,11 +159,11 @@ rollout-step trace 显示，额外 refinement 在 CEM imagined rollout 内的位
 
 ![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
 
-## Raw Target-Latent MSE Diagnostic
+## Historical Raw Target-Latent MSE Diagnostic
 
-在 learned continue head 之前，我们做过一个 post-hoc diagnostic：评估结束后，用真实 target latent 的 MSE 比较不同 depth，然后看 raw latent error 能不能指出哪些 case 需要更深 refinement。
+在当前 `rel00005` learned dynamic-\(K\) 主实验之前，我们在原始 recurrent checkpoints 上做过一个 post-hoc diagnostic：评估结束后，用真实 target latent 的 MSE 比较不同 depth，然后看 raw latent error 能不能指出哪些 case 需要更深 refinement。
 
-这个 diagnostic **不能部署**，因为测试时未来 target latent 不可用。它的作用是分析 raw latent error 里到底有没有 allocation signal。
+这个 diagnostic **不能部署**，因为测试时未来 target latent 不可用；下表里的 fixed-depth 数字也来自 diagnostic checkpoint family，而不是当前主表的 `rel00005` checkpoint family。它的作用是分析 raw latent error 里到底有没有 allocation signal。
 
 | Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |

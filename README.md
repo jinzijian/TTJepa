@@ -223,7 +223,9 @@ The paired `K1`/`K4` outcome split shows why uniform deep refinement is a poor
 default. Most episodes are either already solved by `K1` or remain unsolved at
 `K4`; only a small subset is genuinely helped by deeper refinement. Dynamic
 compute should identify that subset while avoiding redundant or harmful extra
-refinement.
+refinement. In the current `rel00005` paired split, fixed `K4` helps `3/50`
+Reacher episodes and `1/50` Cube Triple episodes, while helping no Cube Single
+or Cube Double episodes.
 
 ![K1/K4 outcome split](analysis/readme_figures/k1_k4_outcome_split.png)
 
@@ -251,13 +253,16 @@ The selected extra depth is mostly \(K=2\), with rare \(K=3/K=4\) use.
 
 ![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
 
-## Raw Latent MSE Diagnostic
+## Historical Raw Latent MSE Diagnostic
 
-Before training the continue head, we used raw target-latent MSE as a post-hoc
-diagnostic: after fixed-depth evaluation, compare true target-latent errors at
-different depths and choose whether shallow or deeper prediction should have
-been used. This is not deployable because it uses future target information,
-but it measures whether raw latent error contains useful allocation signal.
+Before the current `rel00005` learned dynamic-\(K\) main run, we used raw
+target-latent MSE as a post-hoc diagnostic on the original recurrent
+checkpoints. After fixed-depth evaluation, this diagnostic compares true
+target-latent errors at different depths and chooses whether shallow or deeper
+prediction should have been used. It is not deployable because it uses future
+target information, and the fixed-depth columns below are from the diagnostic
+checkpoint family rather than the current main table. We keep it as evidence
+that raw latent error contains useful, but incomplete, allocation signal.
 
 | Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -271,8 +276,8 @@ Takeaways:
 - Raw latent MSE is a useful first signal: on Cube Triple it improves from
   70%@K1 to 76%@K2.32.
 - It remains incomplete: it does not reach fixed K4 or the outcome upper bound.
-- The gap motivates the learned continue head and later planner-alignment
-  analyses.
+- The gap motivates the learned continue head used in the current main table
+  and later planner-alignment analyses.
 
 ![Raw-MSE stopping Pareto](analysis/readme_figures/raw_mse_tolerance_pareto.png)
 

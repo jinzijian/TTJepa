@@ -131,11 +131,12 @@ Important distinction: `LeWM baseline` is the original non-recurrent baseline.
 `Fixed K1` is TTJepa's recurrent transition predictor stopped after one
 refinement step. They are not the same model.
 
-## Raw Target-Latent MSE Diagnostic
+## Historical Raw Target-Latent MSE Diagnostic
 
-This is a post-hoc diagnostic, not a deployable policy. It uses true target
-latents after evaluation to ask whether raw latent error contains information
-about which depth would have been useful.
+This is a post-hoc diagnostic on the original recurrent checkpoints, not the
+current `rel00005` main-table checkpoint family and not a deployable policy. It
+uses true target latents after evaluation to ask whether raw latent error
+contains information about which depth would have been useful.
 
 | Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |

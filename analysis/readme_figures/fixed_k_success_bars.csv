@@ -1,6 +1,5 @@
-task,K1,K2,K3,K4
-Reacher,88,86,86,86
-"Cube Single
-(orig ckpt)",80,76,78,78
-Cube Double,72,70,68,70
-Cube Triple,70,76,76,78
+dataset,k1,k2,k3,k4
+Reacher,80,82,84,82
+Cube Single,84,82,82,82
+Cube Double,70,68,68,68
+Cube Triple,74,74,72,74

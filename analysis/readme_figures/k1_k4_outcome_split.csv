@@ -1,0 +1,5 @@
+dataset,beneficial,harmful,redundant,insufficient,total
+Reacher,3,2,38,7,50
+Cube Single,0,1,41,8,50
+Cube Double,0,1,34,15,50
+Cube Triple,1,1,36,12,50

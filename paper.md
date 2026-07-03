@@ -138,10 +138,11 @@ Current figure artifact:
 
 - `analysis/paper1_figures/png_direct/main_success_vs_lewm.png`
 
-### Table 2: Raw Latent-MSE Dynamic K
+### Table 2: Historical Raw Latent-MSE Dynamic K
 
-This table is a `K1/K4` dynamic-selection analysis. Each episode either stays at
-`K1` or switches to `K4` based on raw latent MSE.
+This table is a historical `K1/K4` dynamic-selection diagnostic on the original
+recurrent checkpoints, not the current `rel00005` main-table checkpoint family.
+Each episode either stays at `K1` or switches to `K4` based on raw latent MSE.
 
 | Dataset | Fixed K1 | Fixed K4 | Best raw-MSE dynamic K | Hindsight K1/K4 chooser | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
