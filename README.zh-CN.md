@@ -125,10 +125,10 @@ h_k = F(h_{k-1}, z_{\mathrm{hist}}, a_{\mathrm{hist}}, \hat z^{(k-1)}-z_{\mathrm
 
 | Dataset | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Best learned dynamic K |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** \((\eta=0.45)\) |
-| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** \((\eta=0.70)\) |
-| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** \((\eta=0.50)\) |
-| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** \((\eta=0.50)\) |
+| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** |
+| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** |
+| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** |
+| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** |
 
 解读：
 
@@ -137,6 +137,8 @@ h_k = F(h_{k-1}, z_{\mathrm{hist}}, a_{\mathrm{hist}}, \hat z^{(k-1)}-z_{\mathrm
 - 主结论不是 “K 越深越好”。主结论是：transition depth 是真实有效的 compute axis，应该动态分配。
 
 这张表取代旧的 `ttjepa_*_dynamic_oracle_k4_10e` learned-head sweep。旧 sweep 使用 raw target-MSE depth labels，作为历史对照保留在实验账本里。
+
+continue threshold \(\eta\) 是 test-time sweep 参数，只用于选择 reported success/compute point；主表里不把它作为核心结果展示。
 
 ## Depth Allocation
 

@@ -184,10 +184,10 @@ and learned dynamic rows are evaluated within the same checkpoint family.
 
 | Dataset | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Best learned dynamic K |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** \((\eta=0.45)\) |
-| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** \((\eta=0.70)\) |
-| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** \((\eta=0.50)\) |
-| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** \((\eta=0.50)\) |
+| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** |
+| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** |
+| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** |
+| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** |
 
 Interpretation:
 
@@ -202,6 +202,10 @@ Interpretation:
 This table supersedes the older `ttjepa_*_dynamic_oracle_k4_10e` learned-head
 sweep. That earlier sweep used raw target-MSE depth labels and is kept as a
 historical comparison in the experiment ledger.
+
+The continue threshold \(\eta\) is a test-time sweep parameter used to choose
+the reported success/compute point; it is intentionally not part of the main
+table.
 
 ![Main success versus LeWM](analysis/readme_figures/main_success_vs_lewm.png)
 

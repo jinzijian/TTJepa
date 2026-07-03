@@ -48,10 +48,14 @@ selected depth over all imagined CEM transition predictions.
 
 | Dataset | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Best learned dynamic K | Readout |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** (`eta=0.45`) | Beats best fixed K3 while using near-K1 compute |
-| Cube single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** (`eta=0.70`) | Ties best fixed K1 and learns not to spend compute |
-| Cube double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** (`eta=0.50`) | Beats all fixed depths with selective refinement |
-| Cube triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** (`eta=0.50`) | Beats all fixed depths in this checkpoint family |
+| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** | Beats best fixed K3 while using near-K1 compute |
+| Cube single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** | Ties best fixed K1 and learns not to spend compute |
+| Cube double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** | Beats all fixed depths with selective refinement |
+| Cube triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** | Beats all fixed depths in this checkpoint family |
+
+The continue threshold `eta` is an evaluation-time sweep parameter. It is not
+shown in the main table because the primary reported quantity is the selected
+success/mean-depth operating point.
 
 Depth allocation at each best learned dynamic point:
 
