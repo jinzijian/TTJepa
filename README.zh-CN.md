@@ -159,24 +159,24 @@ rollout-step trace 显示，额外 refinement 在 CEM imagined rollout 内的位
 
 ![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
 
-## Historical Raw Target-Latent MSE Diagnostic
+## Current Raw Target-Latent MSE Diagnostic
 
-在当前 `rel00005` learned dynamic-\(K\) 主实验之前，我们在原始 recurrent checkpoints 上做过一个 post-hoc diagnostic：评估结束后，用真实 target latent 的 MSE 比较不同 depth，然后看 raw latent error 能不能指出哪些 case 需要更深 refinement。
+我们已经在当前 `rel00005` checkpoint family 上重新计算 raw target-latent MSE diagnostic，因此下表里的 fixed-depth 数字和主表一致。这个 diagnostic 在评估之后比较 `K1` 与 `K4` 的真实 target-latent MSE：只有当 `K4` 的 target MSE 比 `K1` 更低并超过某个 tolerance 时，才选择 `K4`。
 
-这个 diagnostic **不能部署**，因为测试时未来 target latent 不可用；下表里的 fixed-depth 数字也来自 diagnostic checkpoint family，而不是当前主表的 `rel00005` checkpoint family。它的作用是分析 raw latent error 里到底有没有 allocation signal。
+它仍然**不能部署**，因为测试时未来 target latent 不可用；它的作用是分析 raw latent error 里到底有多少 refinement-allocation signal。
 
-| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
+| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Hindsight K1/K4 chooser | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
-| Cube Single | 78.0%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
-| Cube Double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
-| Cube Triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
+| Reacher | 80%@K1.00 | 82%@K4.00 | 80%@K1.00 to K2.20 | 86%@K1.18 | 3 / 50 |
+| Cube Single | 84%@K1.00 | 82%@K4.00 | 84%@K1.00 to K1.12 | 84%@K1.00 | 0 / 50 |
+| Cube Double | 70%@K1.00 | 68%@K4.00 | 70%@K1.00 to K2.14 | 70%@K1.00 | 0 / 50 |
+| Cube Triple | 74%@K1.00 | 74%@K4.00 | 74%@K1.00 to K1.84 | 76%@K1.06 | 1 / 50 |
 
 结论：
 
-- raw latent MSE 不是没信号。Cube Triple 上它从 `70%@K1` 提到 `76%@K2.32`。
-- 但它还不完整：没有追上 fixed K4 的 `78%`，也没有追上 hindsight success upper bound 的 `82%@K1.36`。
-- 这说明 latent prediction error 和 planner 最终关心的 action ranking / selected action 不是完全等价的。
+- 在当前 checkpoint 上，raw target-MSE diagnostic 本身没有带来正收益；最好的 success 基本就是保持 shallow `K1`。
+- 但 hindsight `K1/K4` chooser 仍然显示有少量 episode 确实需要更深 depth：Reacher 有 `3/50`，Cube Triple 有 `1/50`。
+- 这让结论更清楚：target-latent MSE 是有用的分析工具，但它不等价于 planner utility。planner 真正关心的是 candidate ranking 和 selected action。
 
 ## 机制分析
 
@@ -226,6 +226,7 @@ rollout-step trace 显示，额外 refinement 在 CEM imagined rollout 内的位
 
 重要本地 artifacts：
 
+- `analysis/k_refinement_rel00005_current/`
 - `analysis/k_refinement_all_20260620_024634/`
 - `analysis/k_smoothing_20260622/`
 - `analysis/paper1_figures/`

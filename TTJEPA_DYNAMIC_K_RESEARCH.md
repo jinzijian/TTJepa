@@ -1,12 +1,13 @@
 # TTJepa Dynamic K Research Notes
 
-Last updated: 2026-06-23 PT
+Last updated: 2026-07-02 PT
 
-> Status note, 2026-07-01: this file started as a raw-MSE-only planning note.
+> Status note, 2026-07-02: this file started as a raw-MSE-only planning note.
 > The current README and experiment ledger now promote the
 > \(\tau_{\mathrm{rel}}=0.0005\) learned dynamic-K family as the main method.
-> Raw target-MSE remains important as a diagnostic and as the source of the
-> continue-head supervision.
+> Raw target-MSE remains important as the source of continue-head supervision,
+> but the current post-hoc diagnostic has been recomputed on the rel00005
+> checkpoint family and should not be mixed with older checkpoint rows.
 
 This document tracks the current TTJepa direction for dynamic test-time
 refinement depth (`K`) in latent world-model planning. It is a working research
@@ -47,7 +48,7 @@ Avoid these claims for now:
 
 ## Main Evidence So Far
 
-### 1. K matters on cube-triple
+### 1. Historical first evidence: K matters on cube-triple
 
 The original recurrent TTJepa cube-triple checkpoint shows that deeper
 transition refinement can help:
@@ -59,38 +60,40 @@ transition refinement can help:
 | TTJepa fixed K2 | 76% | 2.00 | Most of the fixed-depth gain appears by K2 |
 | TTJepa fixed K3 | 76% | 3.00 | Similar to K2 |
 | TTJepa fixed K4 | 78% | 4.00 | Best fixed-depth result in this run |
-| Hindsight K1/K4 chooser | 82% | 1.36 | Upper bound: use K4 exactly on K1-fail/K4-success episodes |
+| Hindsight K1/K4 chooser | 82% | 1.36 | Episode-level hindsight comparator: use K4 exactly on K1-fail/K4-success episodes |
 
-This is the core reason to keep focusing on K: cube-triple contains cases where
-extra recurrent refinement changes success, and the hindsight upper bound says
-only a small fraction of episodes need deep compute.
+This was the core reason to keep focusing on K: cube-triple contained cases
+where extra recurrent refinement changed success, and the hindsight chooser
+showed that only a small fraction of episodes needed deep compute. The current
+main table uses the newer `rel00005` checkpoint family below, so these numbers
+should be treated as historical motivation rather than the active Table 2.
 
-### 2. Raw target-MSE is a reasonable diagnostic signal, but incomplete
+### 2. Current raw target-MSE diagnostic is useful but not sufficient
 
-Using raw latent MSE to decide whether to continue from K1 to K4 is not
-meaningless:
+Using raw latent MSE to decide whether to continue from K1 to K4 is an
+important diagnostic, but the current rel00005 checkpoint shows that it is not a
+sufficient allocation rule:
 
-| Rule | Success | Mean K | Selected episodes | Notes |
-| --- | ---: | ---: | ---: | --- |
-| Fixed K1 | 70% | 1.00 | 0 | Baseline shallow depth |
-| Raw latent MSE, tolerance 0 | 76% | 2.32 | 22 / 50 | Recovers half of the depth-helped cases |
-| Raw latent MSE, tolerance 0.001 | 74% | 1.96 | 16 / 50 | Less compute, weaker success |
-| Raw latent MSE, tolerance 0.003 | 72% | 1.54 | 9 / 50 | Too conservative |
-| Fixed K4 | 78% | 4.00 | 50 / 50 | Stronger but expensive |
+| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Hindsight K1/K4 chooser | K1 fail / K4 success |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Reacher | 80%@K1.00 | 82%@K4.00 | 80%@K1.00 to K2.20 | 86%@K1.18 | 3 / 50 |
+| Cube Single | 84%@K1.00 | 82%@K4.00 | 84%@K1.00 to K1.12 | 84%@K1.00 | 0 / 50 |
+| Cube Double | 70%@K1.00 | 68%@K4.00 | 70%@K1.00 to K2.14 | 70%@K1.00 | 0 / 50 |
+| Cube Triple | 74%@K1.00 | 74%@K4.00 | 74%@K1.00 to K1.84 | 76%@K1.06 | 1 / 50 |
 
-Episode categories for cube-triple:
+Current cube-triple episode categories:
 
 | Category | Count |
 | --- | ---: |
-| K1 fails, K4 succeeds | 6 |
-| K1 succeeds, K4 fails | 2 |
-| Both succeed | 33 |
-| Both fail | 9 |
+| K1 fails, K4 succeeds | 1 |
+| K1 succeeds, K4 fails | 1 |
+| Both succeed | 36 |
+| Both fail | 12 |
 
-Conclusion: raw latent MSE has signal, but it is too blunt. It recovers some
-depth-helped cases, but it cannot match fixed K4 or the hindsight upper bound.
-This supports the analysis that latent MSE is smoothed and not fully aligned
-with planner-relevant contact details.
+Conclusion: raw target-MSE remains useful as a supervision source and analysis
+tool, but the post-hoc target-MSE rule itself ties shallow K1 on the current
+checkpoint family. It misses sparse helped cases and can spend extra compute on
+redundant cases, reinforcing the planner-alignment story.
 
 ### 3. Planner-feature selector is a diagnostic, not Paper 1
 

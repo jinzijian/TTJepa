@@ -1,0 +1,5 @@
+dataset,lewm,fixed_k1,fixed_k4,mse_diagnostic,mse_diagnostic_success,mse_diagnostic_mean_k_min,mse_diagnostic_mean_k_max,outcome_upper_bound,outcome_upper_bound_success,outcome_upper_bound_mean_k,k1_fail_k4_success,n
+Reacher,80.0,80.0,82.0,80%@K1.00 to K2.20,80.0,1.0,2.2,86%@K1.18,86.0,1.18,3,50
+Cube Single,72.0,84.0,82.0,84%@K1.00 to K1.12,84.0,1.0,1.12,84%@K1.00,84.0,1.0,0,50
+Cube Double,66.0,70.0,68.0,70%@K1.00 to K2.14,70.0,1.0,2.14,70%@K1.00,70.0,1.0,0,50
+Cube Triple,74.0,74.0,74.0,74%@K1.00 to K1.84,74.0,1.0,1.84,76%@K1.06,76.0,1.06,1,50

@@ -24,7 +24,7 @@ Included in the main paper:
 - TTJepa fixed-depth recurrent transition refinement: `K1/K2/K3/K4`.
 - Learned dynamic-K continue head trained with relative marginal MSE labels.
 - Raw target-MSE diagnostic.
-- Hindsight `K1/K4` chooser as an analysis upper bound.
+- Hindsight `K1/K4` chooser as an episode-level analysis comparator.
 - Failure analysis of raw MSE.
 - Depth allocation histograms and rollout-step traces.
 - Latent spectrum / state-probe analysis.
@@ -138,24 +138,27 @@ Current figure artifact:
 
 - `analysis/paper1_figures/png_direct/main_success_vs_lewm.png`
 
-### Table 2: Historical Raw Latent-MSE Dynamic K
+### Table 2: Current Raw Target-MSE Diagnostic
 
-This table is a historical `K1/K4` dynamic-selection diagnostic on the original
-recurrent checkpoints, not the current `rel00005` main-table checkpoint family.
-Each episode either stays at `K1` or switches to `K4` based on raw latent MSE.
+This table uses the current `rel00005` checkpoint family. It is a post-hoc
+diagnostic, not a deployable policy: after evaluation, each episode either
+stays at `K1` or switches to `K4` based on true target-latent MSE improvement.
 
-| Dataset | Fixed K1 | Fixed K4 | Best raw-MSE dynamic K | Hindsight K1/K4 chooser | K1 fail / K4 success |
+| Dataset | Fixed K1 | Fixed K4 | Best target-MSE diagnostic | Hindsight K1/K4 chooser | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
-| Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
-| Cube double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
-| Cube triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
+| Reacher | 80%@K1.00 | 82%@K4.00 | 80%@K1.00 to K2.20 | 86%@K1.18 | 3 / 50 |
+| Cube single | 84%@K1.00 | 82%@K4.00 | 84%@K1.00 to K1.12 | 84%@K1.00 | 0 / 50 |
+| Cube double | 70%@K1.00 | 68%@K4.00 | 70%@K1.00 to K2.14 | 70%@K1.00 | 0 / 50 |
+| Cube triple | 74%@K1.00 | 74%@K4.00 | 74%@K1.00 to K1.84 | 76%@K1.06 | 1 / 50 |
 
 Core conclusion:
 
-Raw latent MSE is a reasonable v0 signal. On cube-triple, it improves
-`70%@K1` to `76%@K2.32`, recovering much of the fixed `K4` gain while using
-less average compute. It is not weak; it is incomplete.
+On the current checkpoint family, target-latent MSE is a useful diagnostic but
+not a sufficient depth-allocation rule. The best target-MSE diagnostic points
+tie shallow `K1`, while the hindsight `K1/K4` chooser still reveals sparse
+useful depth on Reacher and Cube Triple. This strengthens the paper's
+mechanistic claim: prediction-error improvement and planning utility are
+related but not identical.
 
 Current figure artifact:
 
@@ -165,26 +168,27 @@ Current figure artifact:
 
 | Policy | Success | Mean K | Selected K4 count | Interpretation |
 | --- | ---: | ---: | ---: | --- |
-| Fixed K1 | 70% | 1.00 | 0 / 50 | Shallow recurrent depth |
-| Raw latent MSE, tolerance 0 | 76% | 2.32 | 22 / 50 | Recovers part of K4 gain |
-| Raw latent MSE, tolerance 0.001 | 74% | 1.96 | 16 / 50 | Less compute, lower success |
-| Raw latent MSE, tolerance 0.003 | 72% | 1.54 | 9 / 50 | Too conservative |
-| Fixed K4 | 78% | 4.00 | 50 / 50 | Stronger but expensive |
+| Fixed K1 | 74% | 1.00 | 0 / 50 | Shallow recurrent depth |
+| Target MSE, tolerance 0 | 74% | 1.84 | 14 / 50 | Extra compute without success gain |
+| Best target-MSE success / lowest compute | 74% | 1.00 | 0 / 50 | Ties K1 |
+| Hindsight K1/K4 chooser | 76% | 1.06 | 1 / 50 | One sparse helped episode |
+| Fixed K4 | 74% | 4.00 | 50 / 50 | Uniform deep refinement does not help |
 
 Outcome split:
 
 | Category | Count |
 | --- | ---: |
-| K1 fails, K4 succeeds | 6 |
-| K1 succeeds, K4 fails | 2 |
-| Both succeed | 33 |
-| Both fail | 9 |
+| K1 fails, K4 succeeds | 1 |
+| K1 succeeds, K4 fails | 1 |
+| Both succeed | 36 |
+| Both fail | 12 |
 
 Core conclusion:
 
-The gap between raw MSE and the hindsight `K1/K4` chooser is the most important
-analysis signal. It says useful dynamic-K structure exists, but raw latent MSE
-does not perfectly identify it.
+The current checkpoint exposes an even sharper failure mode: target MSE sends
+many redundant cases to `K4` but misses the single helped cube-triple case. The
+learned dynamic policy should therefore be evaluated as a planner-in-the-loop
+test-time compute mechanism, not as a simple post-hoc target-MSE rule.
 
 Current figure artifacts:
 
@@ -316,7 +320,11 @@ Fig. 3: Recurrent transition cell and raw-MSE allocation rule.
 Core argument:
 
 Fixed-depth results establish that `K` is a meaningful axis. Cube-triple gives
-the cleanest evidence: `K1=70%`, `K2=76%`, `K3=76%`, `K4=78%`.
+one kind of evidence that depth changes behavior, while Reacher, Cube Single,
+and Cube Double show that uniformly increasing depth is not reliably best. In
+the current main checkpoint family, the best fixed depth is task-dependent:
+Reacher peaks at `K3`, Cube Single and Cube Double peak at `K1`, and Cube Triple
+has no fixed-depth gain.
 
 Key table:
 
@@ -326,8 +334,11 @@ Table 1: LeWM baseline plus fixed TTJepa `K1/K2/K3/K4`.
 
 Core argument:
 
-Raw latent MSE is a clean first rule. It improves cube-triple from `70%@K1` to
-`76%@K2.32`, close to `78%@K4`, but with lower average `K`.
+Raw target-latent MSE is the simplest diagnostic rule for choosing whether an
+episode should stay shallow or switch to deeper refinement. On the current
+checkpoint family, this rule ties shallow `K1` rather than improving on it,
+while the learned dynamic policy improves the main table. This makes Table 2 a
+failure-analysis table rather than a second main-result table.
 
 Key table:
 
@@ -342,9 +353,10 @@ Fig. 4: Success vs mean `K` Pareto.
 
 Core argument:
 
-Raw MSE has signal, but it does not perfectly identify which episodes benefit
-from deeper `K`. Hindsight `K1/K4` selection shows remaining headroom:
-cube-triple can reach `82%@K1.36`.
+Raw MSE has partial signal, but it does not identify planning utility reliably.
+The current hindsight `K1/K4` comparison shows sparse helped episodes on
+Reacher and Cube Triple, while the target-MSE selector misses them or spends
+compute on redundant cases.
 
 Key figures:
 

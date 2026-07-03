@@ -253,56 +253,61 @@ The selected extra depth is mostly \(K=2\), with rare \(K=3/K=4\) use.
 
 ![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
 
-## Historical Raw Latent MSE Diagnostic
+## Current Raw Target-Latent MSE Diagnostic
 
-Before the current `rel00005` learned dynamic-\(K\) main run, we used raw
-target-latent MSE as a post-hoc diagnostic on the original recurrent
-checkpoints. After fixed-depth evaluation, this diagnostic compares true
-target-latent errors at different depths and chooses whether shallow or deeper
-prediction should have been used. It is not deployable because it uses future
-target information, and the fixed-depth columns below are from the diagnostic
-checkpoint family rather than the current main table. We keep it as evidence
-that raw latent error contains useful, but incomplete, allocation signal.
+We recomputed the raw target-latent MSE diagnostic on the current `rel00005`
+checkpoint family, so the fixed-depth columns below match the main table. After
+fixed-depth evaluation, this diagnostic compares true target-latent errors at
+`K1` and `K4`; it selects `K4` only when `K4` has lower target-latent MSE than
+`K1` by a chosen tolerance. This is still **not deployable**, because the true
+future target latent is unavailable at test time. Its purpose is to measure how
+much refinement-allocation signal is present in raw latent error.
 
-| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
+| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Hindsight K1/K4 chooser | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
-| Cube Single | 78.0%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
-| Cube Double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
-| Cube Triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
+| Reacher | 80%@K1.00 | 82%@K4.00 | 80%@K1.00 to K2.20 | 86%@K1.18 | 3 / 50 |
+| Cube Single | 84%@K1.00 | 82%@K4.00 | 84%@K1.00 to K1.12 | 84%@K1.00 | 0 / 50 |
+| Cube Double | 70%@K1.00 | 68%@K4.00 | 70%@K1.00 to K2.14 | 70%@K1.00 | 0 / 50 |
+| Cube Triple | 74%@K1.00 | 74%@K4.00 | 74%@K1.00 to K1.84 | 76%@K1.06 | 1 / 50 |
 
 Takeaways:
 
-- Raw latent MSE is a useful first signal: on Cube Triple it improves from
-  70%@K1 to 76%@K2.32.
-- It remains incomplete: it does not reach fixed K4 or the outcome upper bound.
-- The gap motivates the learned continue head used in the current main table
-  and later planner-alignment analyses.
+- On the current checkpoint family, raw target-MSE by itself does not recover
+  the helped cases. The best MSE diagnostic operating points tie shallow `K1`
+  rather than improving on it.
+- The hindsight `K1/K4` chooser still shows sparse useful depth: Reacher has
+  `3/50` episodes where `K4` fixes a `K1` failure, and Cube Triple has `1/50`.
+- This makes the key limitation sharper: raw latent error is related to
+  prediction quality, but it is not the same as planning utility. The learned
+  dynamic policy can outperform this post-hoc target-MSE diagnostic because it
+  selects depth per imagined transition inside the planner, rather than making a
+  single episode-level `K1/K4` choice from target error.
 
 ![Raw-MSE stopping Pareto](analysis/readme_figures/raw_mse_tolerance_pareto.png)
 
 ![Raw-MSE precision and recall](analysis/readme_figures/raw_mse_precision_recall_failure.png)
 
-### Raw-MSE Allocation Confusion on Cube Triple
+### Current Target-MSE Allocation Confusion on Cube Triple
 
-The cube-triple outcome split makes the raw-MSE failure mode concrete. With the
-tolerance-0 post-hoc selector, raw MSE sends an episode to `K4` whenever the
+The cube-triple outcome split makes the MSE failure mode concrete. With the
+tolerance-0 post-hoc selector, target MSE sends an episode to `K4` whenever the
 `K4` prediction has lower target-latent MSE than `K1`.
 
 ![Cube Triple raw-MSE allocation confusion](analysis/readme_figures/cube_triple_raw_mse_allocation_confusion.png)
 
 Readout:
 
-- Raw MSE selects `K4` for `3/6` beneficial cases, so it contains real signal.
-- It selects `K4` for `17/33` redundant cases, spending most of its extra
-  compute where the planning outcome was already successful at `K1`.
-- It avoids both harmful cases in this run, but still misses half of the cases
-  where deeper refinement changes failure into success.
+- Target MSE misses the only beneficial `K1`-fail / `K4`-success case in this
+  current Cube Triple checkpoint.
+- It still sends `12/36` redundant both-success cases and `2/12` both-fail
+  cases to `K4`, spending extra compute where the episode outcome does not
+  improve.
+- It avoids the single harmful `K1`-success / `K4`-fail case.
 
-This is the main diagnostic conclusion: raw latent MSE is not weak, but it is
-not the same as planning utility. The selector improves cube-triple from
-`70%@K1` to `76%@K2.32`, yet the outcome-based hindsight chooser reaches
-`82%@K1.36` because it continues on fewer but more valuable cases.
+This is the main diagnostic conclusion: target-latent MSE is a useful analysis
+tool, but it is not the planner's objective. The planner cares about candidate
+ranking and selected actions, so a lower target-latent MSE can be irrelevant to
+success, while a small latent change near a decision boundary can matter.
 
 ## Mechanistic Analysis
 
@@ -501,6 +506,7 @@ older checkpoint families, are kept in:
 Important local artifacts:
 
 - `analysis/readme_figures/`
+- `analysis/k_refinement_rel00005_current/`
 - `analysis/k_refinement_all_20260620_024634/`
 - `analysis/k_smoothing_20260622/`
 - `analysis/paper1_figures/`

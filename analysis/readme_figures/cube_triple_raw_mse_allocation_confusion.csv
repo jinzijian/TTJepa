@@ -1,9 +1,5 @@
-category,n,selected_k1,selected_k4,mean_selected_k,selected_k4_rate
-"Beneficial
-K1 fail, K4 success",6,3,3,2.5,0.5
-"Harmful
-K1 success, K4 fail",2,2,0,1.0,0.0
-"Redundant
-both success",33,16,17,2.5454545454545454,0.5151515151515151
-"Insufficient
-both fail",9,7,2,1.6666666666666665,0.2222222222222222
+category,selected_k1,selected_k4,total
+"Beneficial: K1 fail, K4 success",1,0,1
+"Harmful: K1 success, K4 fail",1,0,1
+Redundant: both success,24,12,36
+Insufficient: both fail,10,2,12

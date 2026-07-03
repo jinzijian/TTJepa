@@ -1,0 +1,74 @@
+{
+  "auc_depth_helped_vs_easy": {},
+  "category_counts": {
+    "depth_hurt_k1_success_k4_fail": 1,
+    "easy_both_success": 41,
+    "hard_both_fail": 8
+  },
+  "category_metric_means": {
+    "depth_hurt_k1_success_k4_fail": {
+      "action_norm_max_to_goal": 1.6497301277008756,
+      "action_norm_mean_to_goal": 1.3431844174739682,
+      "goal_observation_dist": 5.47765712816812,
+      "goal_pos_dist_max": 0.3721868093010369,
+      "goal_pos_dist_mean": 0.3721868093010369,
+      "goal_qpos_dist": 1.0249505492434496,
+      "goal_quat_dist_max": 0.08451395614938184,
+      "goal_quat_dist_mean": 0.08451395614938184,
+      "latent_mse_improvement_abs": 1.681898720562458e-05,
+      "latent_mse_improvement_rel": 0.004558898508548737,
+      "latent_mse_k1": 0.003689265577122569,
+      "latent_mse_k4": 0.0036724465899169445,
+      "latent_oracle_depth_2pct": 1.0,
+      "residual_max": 0.00015144734061323106,
+      "residual_mean_k1": 0.00015144734061323106,
+      "residual_mean_k4": 8.006094276424847e-08,
+      "start_block_pairwise_min": null
+    },
+    "easy_both_success": {
+      "action_norm_max_to_goal": 1.365510709289551,
+      "action_norm_mean_to_goal": 0.8411513016200952,
+      "goal_observation_dist": 3.19752387346334,
+      "goal_pos_dist_max": 0.11601706368854058,
+      "goal_pos_dist_mean": 0.11601706368854058,
+      "goal_qpos_dist": 1.0053748555372313,
+      "goal_quat_dist_max": 0.04510413075296051,
+      "goal_quat_dist_mean": 0.04510413075296051,
+      "latent_mse_improvement_abs": 1.9108950410310813e-06,
+      "latent_mse_improvement_rel": 0.0009239755717186843,
+      "latent_mse_k1": 0.0023669369927630194,
+      "latent_mse_k4": 0.002365026097721988,
+      "latent_oracle_depth_2pct": 1.024390243902439,
+      "residual_max": 1.3022379150634398e-05,
+      "residual_mean_k1": 1.3022379150634398e-05,
+      "residual_mean_k4": 2.4855838214915965e-07,
+      "start_block_pairwise_min": null
+    },
+    "hard_both_fail": {
+      "action_norm_max_to_goal": 1.2981197813088365,
+      "action_norm_mean_to_goal": 0.8857472112937178,
+      "goal_observation_dist": 3.0230126753984603,
+      "goal_pos_dist_max": 0.15058039319328004,
+      "goal_pos_dist_mean": 0.15058039319328004,
+      "goal_qpos_dist": 1.0876604641993646,
+      "goal_quat_dist_max": 0.10769544633550096,
+      "goal_quat_dist_mean": 0.10769544633550096,
+      "latent_mse_improvement_abs": 1.9873841665685177e-06,
+      "latent_mse_improvement_rel": 0.0007317402592725841,
+      "latent_mse_k1": 0.0021908578200964257,
+      "latent_mse_k4": 0.002188870435929857,
+      "latent_oracle_depth_2pct": 1.0,
+      "residual_max": 2.2249858529943545e-05,
+      "residual_mean_k1": 2.2249858529943545e-05,
+      "residual_mean_k4": 4.513836814089636e-13,
+      "start_block_pairwise_min": null
+    }
+  },
+  "num_rows": 50,
+  "spec": {
+    "h5_path": "/vepfs/zijian/lewm_data/cube_single_expert.h5",
+    "name": "cube_single_rel00005_current",
+    "num_seeds": 1,
+    "policy": "ttjepa_cube_joint_marginal_rel00005_k4_10e/weights_epoch_10.pt"
+  }
+}

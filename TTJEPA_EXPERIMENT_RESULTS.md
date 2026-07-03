@@ -1,6 +1,6 @@
 # TTJepa Experiment Results Ledger
 
-Last updated: 2026-07-01 PT
+Last updated: 2026-07-02 PT
 
 This file preserves the full experiment record. The README now keeps the
 public-facing motivation plus the current learned dynamic-K result table. This
@@ -9,12 +9,13 @@ raw-MSE analyses, checkpoint paths, logs, planner-feature selectors,
 whitened/probe-weighted variants, and exploratory training-time regularization
 leads.
 
-Important convention: do not mix rows across checkpoint families. The older
-raw-MSE diagnostic results use the original recurrent checkpoints under
-`analysis/k_refinement_all_20260620_024634`. The current learned dynamic-K main
-results use the \(\tau_{\mathrm{rel}}=0.0005\) relative-improvement checkpoint
-family. In discussion this setting is often abbreviated as `rel0005`; the
-remote four-dataset artifact directories are named `rel00005`.
+Important convention: do not mix rows across checkpoint families. The current
+learned dynamic-K main results and the current raw target-MSE diagnostic use the
+\(\tau_{\mathrm{rel}}=0.0005\) relative-improvement checkpoint family. In
+discussion this setting is often abbreviated as `rel0005`; the remote
+four-dataset artifact directories are named `rel00005`. Older raw-MSE
+diagnostics from the original recurrent checkpoints are preserved separately
+under `analysis/k_refinement_all_20260620_024634`.
 
 ## Scope Map
 
@@ -23,7 +24,7 @@ remote four-dataset artifact directories are named `rel00005`.
 | Learned dynamic K with relative marginal MSE supervision, \(\tau_{\mathrm{rel}}=0.0005\) / `rel0005` shorthand | Yes | Current main deployable dynamic-K method; four-dataset remote dirs use `rel00005` |
 | Fixed-depth recurrent TTJepa, `K1/K2/K3/K4` | Yes | Same-checkpoint baselines for dynamic K |
 | Raw target-latent MSE diagnostic | Yes | Post-hoc diagnostic showing what latent error can and cannot identify |
-| Hindsight K1/K4 success chooser | Yes | Analytical upper bound only |
+| Hindsight K1/K4 success chooser | Yes | Episode-level analytical comparison; not a deployable policy |
 | Depth-allocation histograms and rollout-step traces | Yes | Shows where learned dynamic K spends compute |
 | Latent spectrum and state-probe analysis | Yes | Mechanistic/failure analysis |
 | Planner-feature selector | No | Diagnostic evidence that planner traces contain useful signal |
@@ -131,43 +132,44 @@ Important distinction: `LeWM baseline` is the original non-recurrent baseline.
 `Fixed K1` is TTJepa's recurrent transition predictor stopped after one
 refinement step. They are not the same model.
 
-## Historical Raw Target-Latent MSE Diagnostic
+## Current Raw Target-Latent MSE Diagnostic
 
-This is a post-hoc diagnostic on the original recurrent checkpoints, not the
-current `rel00005` main-table checkpoint family and not a deployable policy. It
-uses true target latents after evaluation to ask whether raw latent error
-contains information about which depth would have been useful.
+This post-hoc diagnostic has been recomputed on the current `rel00005`
+main-table checkpoint family. It is still not a deployable policy: it uses true
+target latents after evaluation to ask whether raw latent error contains
+information about which depth would have been useful. Each episode either stays
+at `K1` or switches to `K4` based on the target-MSE improvement.
 
-| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Outcome upper bound | K1 fail / K4 success |
+| Dataset | Fixed K1 | Fixed K4 | MSE diagnostic | Hindsight K1/K4 chooser | K1 fail / K4 success |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 88%@K1.00 | 86%@K4.00 | 88%@K1.06 to K2.32 | 92%@K1.12 | 2 / 50 |
-| Cube single | 78%@K1.00 | 77.3%@K4.00 | 77.3%@K2.72 to K2.96 | 80.7%@K1.08 | 4 / 150 |
-| Cube double | 72%@K1.00 | 70%@K4.00 | 72%@K1.00 to K2.62 | 72%@K1.00 | 0 / 50 |
-| Cube triple | 70%@K1.00 | 78%@K4.00 | 76%@K2.32 | 82%@K1.36 | 6 / 50 |
+| Reacher | 80%@K1.00 | 82%@K4.00 | 80%@K1.00 to K2.20 | 86%@K1.18 | 3 / 50 |
+| Cube single | 84%@K1.00 | 82%@K4.00 | 84%@K1.00 to K1.12 | 84%@K1.00 | 0 / 50 |
+| Cube double | 70%@K1.00 | 68%@K4.00 | 70%@K1.00 to K2.14 | 70%@K1.00 | 0 / 50 |
+| Cube triple | 74%@K1.00 | 74%@K4.00 | 74%@K1.00 to K1.84 | 76%@K1.06 | 1 / 50 |
 
-Cube-triple threshold sweep:
+Cube-triple threshold sweep on the current checkpoint:
 
 | Rule | Success | Mean K | Selected episodes | Notes |
 | --- | ---: | ---: | ---: | --- |
-| Fixed K1 | 70% | 1.00 | 0 / 50 | Shallow baseline |
-| Raw latent MSE, tolerance 0 | 76% | 2.32 | 22 / 50 | Recovers part of the K4 gain |
-| Raw latent MSE, tolerance 0.001 | 74% | 1.96 | 16 / 50 | Less compute, weaker success |
-| Raw latent MSE, tolerance 0.003 | 72% | 1.54 | 9 / 50 | Too conservative |
-| Fixed K4 | 78% | 4.00 | 50 / 50 | Stronger but expensive |
+| Fixed K1 | 74% | 1.00 | 0 / 50 | Shallow recurrent depth |
+| Target MSE, tolerance 0 | 74% | 1.84 | 14 / 50 | Spends extra compute without success gain |
+| Best target-MSE success / lowest compute | 74% | 1.00 | 0 / 50 | Best MSE diagnostic ties K1 |
+| Hindsight K1/K4 chooser | 76% | 1.06 | 1 / 50 | Shows one sparse K4-helped case |
+| Fixed K4 | 74% | 4.00 | 50 / 50 | Uniform deep refinement does not help |
 
 Cube-triple K1/K4 episode categories:
 
 | Category | Count |
 | --- | ---: |
-| K1 fails, K4 succeeds | 6 |
-| K1 succeeds, K4 fails | 2 |
-| Both succeed | 33 |
-| Both fail | 9 |
+| K1 fails, K4 succeeds | 1 |
+| K1 succeeds, K4 fails | 1 |
+| Both succeed | 36 |
+| Both fail | 12 |
 
 Local artifacts:
 
-- `analysis/k_refinement_all_20260620_024634/raw_mse_k_gating_sweep.csv`
-- `analysis/k_refinement_all_20260620_024634/k_gating_pareto_all.png`
+- `analysis/k_refinement_rel00005_current/raw_mse_current_summary.csv`
+- `analysis/k_refinement_rel00005_current/raw_mse_current_sweep.csv`
 - `analysis/paper1_figures/png_direct/raw_mse_tolerance_pareto.png`
 - `analysis/paper1_figures/png_direct/k1_k4_outcome_split.png`
 - `analysis/paper1_figures/png_direct/raw_mse_precision_recall_failure.png`
