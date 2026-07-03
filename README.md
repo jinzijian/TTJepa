@@ -205,7 +205,9 @@ historical comparison in the experiment ledger.
 
 The continue threshold \(\eta\) is a test-time sweep parameter used to choose
 the reported success/compute point; it is intentionally not part of the main
-table.
+table. The reported operating points use \(\eta=0.45\) for Reacher,
+\(\eta=0.70\) for Cube Single, and \(\eta=0.50\) for Cube Double and Cube
+Triple.
 
 ![Main success versus LeWM](analysis/readme_figures/main_success_vs_lewm.png)
 

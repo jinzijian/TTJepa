@@ -138,7 +138,7 @@ h_k = F(h_{k-1}, z_{\mathrm{hist}}, a_{\mathrm{hist}}, \hat z^{(k-1)}-z_{\mathrm
 
 这张表取代旧的 `ttjepa_*_dynamic_oracle_k4_10e` learned-head sweep。旧 sweep 使用 raw target-MSE depth labels，作为历史对照保留在实验账本里。
 
-continue threshold \(\eta\) 是 test-time sweep 参数，只用于选择 reported success/compute point；主表里不把它作为核心结果展示。
+continue threshold \(\eta\) 是 test-time sweep 参数，只用于选择 reported success/compute point；主表里不把它作为核心结果展示。当前 reported operating points 使用：Reacher \(\eta=0.45\)，Cube Single \(\eta=0.70\)，Cube Double 和 Cube Triple \(\eta=0.50\)。
 
 ## Depth Allocation
 

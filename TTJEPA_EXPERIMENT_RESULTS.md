@@ -55,7 +55,9 @@ selected depth over all imagined CEM transition predictions.
 
 The continue threshold `eta` is an evaluation-time sweep parameter. It is not
 shown in the main table because the primary reported quantity is the selected
-success/mean-depth operating point.
+success/mean-depth operating point. The reported operating points use
+`eta=0.45` for Reacher, `eta=0.70` for Cube single, and `eta=0.50` for Cube
+double and Cube triple.
 
 Depth allocation at each best learned dynamic point:
 
