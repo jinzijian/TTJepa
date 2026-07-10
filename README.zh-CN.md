@@ -159,6 +159,23 @@ rollout-step trace 显示，额外 refinement 在 CEM imagined rollout 内的位
 
 ![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
 
+### PushT 成功例子的定性 trace
+
+上面的 rollout-step 图是 aggregate 统计。我们还单独 trace 了一个
+PushT H10/goal50 的成功 episode：`global=1474257`，threshold
+\(\eta=0.30\)。这个 episode 在 evaluator 下 success=True，同时并不是全程都深算；
+learned policy 的 mean \(K=1.287\)，其中 \(21.8\%\) 的 imagined
+predictions 使用 \(K>1\)。最明显的 extra-refinement 区域集中在 imagined
+rollout step \(+3\) 附近的一段 planning window。
+
+![PushT success trace with high-refinement decisions](figures/pusht_success_highk_env6_trace_panel.png)
+
+成功动图预览：
+
+![PushT success dynamic K preview](figures/pusht_success_highk_env6_annotated.gif)
+
+MP4：[pusht_success_highk_env6_annotated.mp4](figures/pusht_success_highk_env6_annotated.mp4)
+
 ## Current Raw Target-Latent MSE Diagnostic
 
 我们已经在当前 `rel00005` checkpoint family 上重新计算 raw target-latent MSE diagnostic，因此下表里的 fixed-depth 数字和主表一致。这个 diagnostic 在评估之后比较 `K1` 与 `K4` 的真实 target-latent MSE：只有当 `K4` 的 target MSE 比 `K1` 更低并超过某个 tolerance 时，才选择 `K4`。

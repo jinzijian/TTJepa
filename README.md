@@ -253,6 +253,23 @@ The selected extra depth is mostly \(K=2\), with rare \(K=3/K=4\) use.
 
 ![Depth by rollout step breakdown](figures/depth_by_rollout_step_stacked_rel00005.png)
 
+### Qualitative PushT Success Trace
+
+The rollout-step statistics above are aggregate summaries. We also traced a
+single PushT H10/goal50 episode that succeeds under the evaluator while using
+extra refinement only in a narrow planning window. In this trace
+(`global=1474257`, \(\eta=0.30\)), the learned policy has mean \(K=1.287\),
+with \(21.8\%\) of imagined predictions refined beyond \(K=1\). The strongest
+extra-refinement band appears around imagined rollout step \(+3\).
+
+![PushT success trace with high-refinement decisions](figures/pusht_success_highk_env6_trace_panel.png)
+
+Animated preview:
+
+![PushT success dynamic K preview](figures/pusht_success_highk_env6_annotated.gif)
+
+MP4: [pusht_success_highk_env6_annotated.mp4](figures/pusht_success_highk_env6_annotated.mp4)
+
 ## Current Raw Target-Latent MSE Diagnostic
 
 We recomputed the raw target-latent MSE diagnostic on the current `rel00005`
