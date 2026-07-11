@@ -125,20 +125,21 @@ h_k = F(h_{k-1}, z_{\mathrm{hist}}, a_{\mathrm{hist}}, \hat z^{(k-1)}-z_{\mathrm
 
 | Dataset | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Best learned dynamic K |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** |
-| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** |
-| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** |
-| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** |
+| Reacher | 81.3% | 84.0% | 82.0% | 83.3% | 82.7% | **85.3%@K1.03** |
+| Cube Single | 72.0% | **79.3%** | 78.7% | 78.0% | 78.0% | **79.3%@K1.00** |
+| Cube Double | **74.7%** | 72.0% | 72.0% | 72.7% | 72.0% | 74.0%@K1.26 |
+| Cube Triple | 74.0% | 74.0% | 74.0% | 73.3% | 74.0% | **77.3%@K1.22** |
 
 解读：
 
-- Reacher、Cube Double、Cube Triple 上，learned dynamic \(K\) 超过所有 fixed-depth baseline，同时平均 compute 接近 \(K=1\)。
+- Reacher 和 Cube Triple 上，learned dynamic \(K\) 超过 LeWM 和所有 fixed-depth baseline，同时平均 compute 接近 \(K=1\)。
+- Cube Double 上，learned dynamic \(K\) 超过所有 fixed-depth RefineJEPA evaluation，但这版 3-seed 平均里原始 LeWM baseline 仍略高。这说明 recurrent predictor 的质量和 dynamic allocation 的质量要分开讨论。
 - Cube Single 是一个很有用的反例/控制组：这个 checkpoint 中 fixed K1 已经最好，learned selector 基本全停在 K1，并没有乱花 compute。
 - 主结论不是 “K 越深越好”。主结论是：transition depth 是真实有效的 compute axis，应该动态分配。
 
 这张表取代旧的 `ttjepa_*_dynamic_oracle_k4_10e` learned-head sweep。旧 sweep 使用 raw target-MSE depth labels，作为历史对照保留在实验账本里。
 
-continue threshold \(\eta\) 是 test-time sweep 参数，只用于选择 reported success/compute point；主表里不把它作为核心结果展示。当前 reported operating points 使用：Reacher \(\eta=0.45\)，Cube Single \(\eta=0.70\)，Cube Double 和 Cube Triple \(\eta=0.50\)。
+continue threshold \(\eta\) 是 test-time sweep 参数，只用于选择 reported success/compute point；主表里不把它作为核心结果展示。当前 reported operating points 使用：Reacher \(\eta=0.45\)，Cube Single \(\eta=0.70\)，Cube Double \(\eta=0.45\)，Cube Triple \(\eta=0.30\)。
 
 ## Depth Allocation
 
@@ -146,10 +147,10 @@ learned dynamic policy 只在少数 imagined transitions 上花额外 compute。
 
 | Dataset | Best dynamic | K=1 | K=2 | K=3 | K=4 | 超过 K1 的比例 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 86%@K1.08 | 92.19% | 7.65% | 0.16% | 0.007% | 7.81% |
-| Cube Single | 84%@K1.00 | 99.987% | 0.013% | 0% | 0% | 0.013% |
-| Cube Double | 72%@K1.10 | 91.20% | 7.95% | 0.78% | 0.070% | 8.80% |
-| Cube Triple | 78%@K1.06 | 95.20% | 3.24% | 1.50% | 0.049% | 4.80% |
+| Reacher | 85.3%@K1.03 | 96.77% | 3.11% | 0.12% | 0.003% | 3.23% |
+| Cube Single | 79.3%@K1.00 | 99.984% | 0.017% | 0.0001% | 0% | 0.017% |
+| Cube Double | 74.0%@K1.26 | 76.49% | 21.09% | 1.69% | 0.72% | 23.51% |
+| Cube Triple | 77.3%@K1.22 | 89.41% | 3.71% | 2.64% | 4.25% | 10.59% |
 
 ![Depth allocation](figures/depth_allocation_rel00005.png)
 
@@ -178,7 +179,7 @@ MP4：[pusht_success_highk_env6_annotated.mp4](figures/pusht_success_highk_env6_
 
 ## Current Raw Target-Latent MSE Diagnostic
 
-我们已经在当前 `rel00005` checkpoint family 上重新计算 raw target-latent MSE diagnostic，因此下表里的 fixed-depth 数字和主表一致。这个 diagnostic 在评估之后比较 `K1` 与 `K4` 的真实 target-latent MSE：只有当 `K4` 的 target MSE 比 `K1` 更低并超过某个 tolerance 时，才选择 `K4`。
+下面的 raw target-latent MSE diagnostic 是当前 `rel00005` checkpoint family 上的 50-episode 机制分析切片，不是上面 3-seed 主表的同一统计口径。这个 diagnostic 在评估之后比较 `K1` 与 `K4` 的真实 target-latent MSE：只有当 `K4` 的 target MSE 比 `K1` 更低并超过某个 tolerance 时，才选择 `K4`。
 
 它仍然**不能部署**，因为测试时未来 target latent 不可用；它的作用是分析 raw latent error 里到底有多少 refinement-allocation signal。
 

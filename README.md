@@ -184,15 +184,18 @@ and learned dynamic rows are evaluated within the same checkpoint family.
 
 | Dataset | LeWM baseline | Fixed K1 | Fixed K2 | Fixed K3 | Fixed K4 | Best learned dynamic K |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 80% | 80% | 82% | 84% | 82% | **86%@K1.08** |
-| Cube Single | 72% | **84%** | 82% | 82% | 82% | **84%@K1.00** |
-| Cube Double | 66% | 70% | 68% | 68% | 68% | **72%@K1.10** |
-| Cube Triple | 74% | 74% | 74% | 72% | 74% | **78%@K1.06** |
+| Reacher | 81.3% | 84.0% | 82.0% | 83.3% | 82.7% | **85.3%@K1.03** |
+| Cube Single | 72.0% | **79.3%** | 78.7% | 78.0% | 78.0% | **79.3%@K1.00** |
+| Cube Double | **74.7%** | 72.0% | 72.0% | 72.7% | 72.0% | 74.0%@K1.26 |
+| Cube Triple | 74.0% | 74.0% | 74.0% | 73.3% | 74.0% | **77.3%@K1.22** |
 
 Interpretation:
 
-- Reacher, Cube Double, and Cube Triple improve over the best fixed-depth
+- Reacher and Cube Triple improve over both LeWM and every fixed-depth
   baseline while using near-\(K=1\) average compute.
+- Cube Double improves over every fixed-depth RefineJEPA evaluation, but the
+  original LeWM baseline remains slightly higher in this 3-seed average. This
+  separates recurrent-predictor quality from dynamic allocation quality.
 - Cube Single is the useful negative/control case: this checkpoint's best fixed
   depth is already \(K=1\), and the learned selector correspondingly keeps
   almost everything at \(K=1\).
@@ -206,8 +209,8 @@ historical comparison in the experiment ledger.
 The continue threshold \(\eta\) is a test-time sweep parameter used to choose
 the reported success/compute point; it is intentionally not part of the main
 table. The reported operating points use \(\eta=0.45\) for Reacher,
-\(\eta=0.70\) for Cube Single, and \(\eta=0.50\) for Cube Double and Cube
-Triple.
+\(\eta=0.70\) for Cube Single, \(\eta=0.45\) for Cube Double, and
+\(\eta=0.30\) for Cube Triple.
 
 ![Main success versus LeWM](analysis/readme_figures/main_success_vs_lewm.png)
 
@@ -236,10 +239,10 @@ imagined transitions.
 
 | Dataset | Best dynamic | K=1 | K=2 | K=3 | K=4 | Refined beyond K1 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Reacher | 86%@K1.08 | 92.19% | 7.65% | 0.16% | 0.007% | 7.81% |
-| Cube Single | 84%@K1.00 | 99.987% | 0.013% | 0% | 0% | 0.013% |
-| Cube Double | 72%@K1.10 | 91.20% | 7.95% | 0.78% | 0.070% | 8.80% |
-| Cube Triple | 78%@K1.06 | 95.20% | 3.24% | 1.50% | 0.049% | 4.80% |
+| Reacher | 85.3%@K1.03 | 96.77% | 3.11% | 0.12% | 0.003% | 3.23% |
+| Cube Single | 79.3%@K1.00 | 99.984% | 0.017% | 0.0001% | 0% | 0.017% |
+| Cube Double | 74.0%@K1.26 | 76.49% | 21.09% | 1.69% | 0.72% | 23.51% |
+| Cube Triple | 77.3%@K1.22 | 89.41% | 3.71% | 2.64% | 4.25% | 10.59% |
 
 ![Depth allocation](figures/depth_allocation_rel00005.png)
 
@@ -272,8 +275,8 @@ MP4: [pusht_success_highk_env6_annotated.mp4](figures/pusht_success_highk_env6_a
 
 ## Current Raw Target-Latent MSE Diagnostic
 
-We recomputed the raw target-latent MSE diagnostic on the current `rel00005`
-checkpoint family, so the fixed-depth columns below match the main table. After
+The following raw target-latent MSE diagnostic is a 50-episode mechanism slice
+on the `rel00005` checkpoint family, not the 3-seed main table above. After
 fixed-depth evaluation, this diagnostic compares true target-latent errors at
 `K1` and `K4`; it selects `K4` only when `K4` has lower target-latent MSE than
 `K1` by a chosen tolerance. This is still **not deployable**, because the true
