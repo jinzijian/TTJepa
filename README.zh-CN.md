@@ -101,6 +101,59 @@ target latent。
 因此，当前方法不是测试时直接查看 MSE，而是让 continue head 在训练时
 学习一个 MSE-derived supervision 的 deployable proxy。
 
+### K=1、K=2、K=3 时，recurrent 的输入输出分别是什么？
+
+这里有两层不同的循环。外层 autoregressive rollout 预测不同世界时间的
+\(z_{t+1},z_{t+2},\ldots\)；dynamic \(K\) 控制的是内层循环，即对**同一个
+next-state prediction**反复 refinement。
+
+以 `history_size=3` 为例，一个 imagined transition 的输入为：
+
+\[
+x=[z_{t-2},z_{t-1},z_t], \qquad
+c=[a_{t-2},a_{t-1},a_t].
+\]
+
+其中 \(c\) 是某一条 CEM candidate action sequence 的 action embeddings。
+Base transformer 先产生 \(h_0\)、初始 latent guess \(\hat z^{(0)}\)，以及
+由 \(x\) 得到且在整个内层循环中保持不变的 anchor。代码报告的 \(K=1\)
+已经包含一次 shared refinement cell：
+
+\[
+f_1=\hat z^{(0)}-\operatorname{anchor}(x), \qquad
+h_1=R_\theta(h_0,c,f_1),
+\]
+
+\[
+\hat z^{(1)}=\hat z^{(0)}
++s\,\sigma(\Gamma(h_1))\odot\Delta(h_1).
+\]
+
+如果 continue head 要求继续，第二次仍然使用同一组参数、同一份 latent
+history 和同一 candidate action。变化的是上一轮 hidden state 和预测反馈：
+
+\[
+f_2=\hat z^{(1)}-\operatorname{anchor}(x), \qquad
+h_2=R_\theta(h_1,c,f_2),
+\]
+
+\[
+\hat z^{(2)}=\hat z^{(1)}
++s\,\sigma(\Gamma(h_2))\odot\Delta(h_2).
+\]
+
+第三、第四次分别用 \((h_2,\hat z^{(2)})\) 和
+\((h_3,\hat z^{(3)})\) 重复同样的更新。这个 inner loop 不会编码新图像，
+也不会重新 sample action。上一轮 prediction 通过相对 anchor 的 residual
+反馈回来，而不是替换原始 history。
+
+当 selector 在 \(K_i\) 停止时，\(\hat z_{t+1}^{(K_i)}\) 会被追加到 imagined
+temporal history。外层 rollout 将 history 移动为
+\([z_{t-1},z_t,\hat z_{t+1}^{(K_i)}]\)，加入 candidate 的下一个 action，
+然后重新调用 base transformer 预测 \(z_{t+2}\)。因此，hidden state 只在
+同一个 transition 的 refinement 内 recurrent；跨 transition 的 temporal
+memory 由 latent/action history 携带。
+
 ## 主结果
 
 下面结果来自三组 paired train/eval seeds：`3072/42`、`3073/43`、
@@ -115,6 +168,7 @@ checkpoints。
 | Cube Single | 72.0\(\pm\)12.0 | **79.3\(\pm\)8.1** | 78.7\(\pm\)7.6 | 78.0\(\pm\)8.7 | 78.0\(\pm\)8.7 | **79.3\(\pm\)8.1 @ K1.00** |
 | Cube Double | **74.7\(\pm\)7.6** | 72.0\(\pm\)3.5 | 72.0\(\pm\)5.3 | 72.7\(\pm\)5.0 | 72.0\(\pm\)5.3 | 74.0\(\pm\)3.5 @ K1.26 |
 | Cube Triple | 74.0\(\pm\)8.0 | 74.0\(\pm\)4.0 | 74.0\(\pm\)0.0 | 73.3\(\pm\)5.0 | 74.0\(\pm\)6.0 | **77.3\(\pm\)7.6 @ K1.22** |
+| PushT H=10 / goal offset=50 | 11.3\(\pm\)5.0 | 13.3\(\pm\)6.1 | 14.7\(\pm\)6.4 | 15.3\(\pm\)8.1 | 12.7\(\pm\)8.3 | **17.3\(\pm\)7.6 @ K1.02** |
 
 ![Main success comparison](analysis/readme_figures/main_success_vs_lewm.png)
 
@@ -125,6 +179,10 @@ checkpoints。
 - Cube Single 是有价值的 negative/control case：Fixed \(K=1\) 已经最强，
   selector 基本全部停在 \(K=1\)。
 - Cube Double 超过所有 fixed-depth RefineJEPA 结果，但仍比 LeWM 低 0.7。
+- 在明确标注的 long-horizon PushT setting 中，dynamic \(K\) 相比 LeWM
+  提升 6.0 points，相比最好的 fixed depth 提升 2.0 points，而 mean
+  \(K=1.02\)。这一行同时改变了 planner horizon 与 goal offset，不能被
+  解读成相对 default PushT 的单调 horizon 对比。
 
 Seed 间方差仍然较大，所以目前支持的是方法趋势，而不是“每个任务上都
 统计显著胜出”的结论。
@@ -133,7 +191,8 @@ Seed 间方差仍然较大，所以目前支持的是方法趋势，而不是“
 
 主表中的 dynamic 结果来自 test-time \(\eta\) sweep 后观察到的最佳
 success/mean-\(K\) operating point：Reacher \(0.45\)、Cube Single
-\(0.70\)、Cube Double \(0.45\)、Cube Triple \(0.30\)。这些 threshold
+\(0.70\)、Cube Double \(0.45\)、Cube Triple \(0.30\)、PushT H=10/goal offset=50
+\(0.60\)。这些 threshold
 是在 evaluation sweep 上选出的，因此当前表格应被理解为 **post-hoc
 Pareto envelope**，不是无偏 test estimate。最终论文应在 held-out
 validation episodes 上选择 \(\eta\)，然后在 test set 上只评一次。
@@ -161,10 +220,13 @@ throughput measurement。
 
 ### PushT 定性成功 trace
 
-下面是一个单独的 PushT H10/goal50 成功 episode，只作为 qualitative
+下面是一个单独的 PushT H=10/goal offset=50 成功 episode，只作为 qualitative
 trace，不代表 aggregate benchmark。`global=1474257`、\(\eta=0.30\)
 时 mean \(K=1.287\)，21.8% 的 imagined predictions 使用 \(K>1\)，最强
-refinement band 位于 imagined rollout step \(+3\) 附近。
+refinement band 位于 imagined rollout step \(+3\) 附近。为了让 extra
+refinement 的位置更清楚，这个 visualization 使用了比主表 aggregate
+operating point 更低的 threshold；主表 PushT 数字对应 \(\eta=0.60\)，
+两者不能混作同一个定量结果。
 
 ![PushT success trace with high-refinement decisions](figures/pusht_success_highk_env6_trace_panel.png)
 

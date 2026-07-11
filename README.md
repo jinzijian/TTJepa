@@ -105,6 +105,61 @@ The current selector therefore learns a deployable proxy for an MSE-derived
 training signal. It does **not** observe future target MSE or run CEM comparisons
 at test time.
 
+### What are the recurrent inputs and outputs at K=1, K=2, and K=3?
+
+There are two different loops. The outer autoregressive rollout predicts
+different world times, \(z_{t+1},z_{t+2},\ldots\). Dynamic \(K\) controls an
+inner loop that repeatedly refines the **same** next-state prediction.
+
+For one imagined transition with history size three, the predictor receives
+
+\[
+x=[z_{t-2},z_{t-1},z_t], \qquad
+c=[a_{t-2},a_{t-1},a_t],
+\]
+
+where \(c\) contains the encoded actions from one CEM candidate. The base
+transformer produces \(h_0\), an initial latent guess \(\hat z^{(0)}\), and a
+fixed anchor derived from \(x\). The reported \(K=1\) already includes one pass
+through the shared refinement cell:
+
+\[
+f_1=\hat z^{(0)}-\operatorname{anchor}(x), \qquad
+h_1=R_\theta(h_0,c,f_1),
+\]
+
+\[
+\hat z^{(1)}=\hat z^{(0)}
++s\,\sigma(\Gamma(h_1))\odot\Delta(h_1).
+\]
+
+If the continue head asks for another step, the second pass reuses the same
+parameters and the same transition/action context. Its changing inputs are the
+previous hidden state and prediction feedback:
+
+\[
+f_2=\hat z^{(1)}-\operatorname{anchor}(x), \qquad
+h_2=R_\theta(h_1,c,f_2),
+\]
+
+\[
+\hat z^{(2)}=\hat z^{(1)}
++s\,\sigma(\Gamma(h_2))\odot\Delta(h_2).
+\]
+
+The third and fourth passes repeat the same update with
+\((h_2,\hat z^{(2)})\) and \((h_3,\hat z^{(3)})\). No new image is encoded and
+no new action is sampled inside this inner loop. The previous prediction is fed
+back as an anchor-relative residual rather than replacing the original history.
+
+Once the head stops at depth \(K_i\), the selected
+\(\hat z_{t+1}^{(K_i)}\) is appended to the imagined temporal history. The
+outer rollout then shifts the history to
+\([z_{t-1},z_t,\hat z_{t+1}^{(K_i)}]\), appends the candidate's next action,
+and starts a fresh base-transformer call for \(z_{t+2}\). The refinement hidden
+state is therefore recurrent within one transition, while temporal memory
+across transitions is carried by the latent/action history.
+
 ## Main Results
 
 The table reports success over three paired train/evaluation seed pairs
@@ -119,6 +174,7 @@ dynamic \(K\) are evaluated from the same RefineJEPA checkpoint family.
 | Cube Single | 72.0\(\pm\)12.0 | **79.3\(\pm\)8.1** | 78.7\(\pm\)7.6 | 78.0\(\pm\)8.7 | 78.0\(\pm\)8.7 | **79.3\(\pm\)8.1 @ K1.00** |
 | Cube Double | **74.7\(\pm\)7.6** | 72.0\(\pm\)3.5 | 72.0\(\pm\)5.3 | 72.7\(\pm\)5.0 | 72.0\(\pm\)5.3 | 74.0\(\pm\)3.5 @ K1.26 |
 | Cube Triple | 74.0\(\pm\)8.0 | 74.0\(\pm\)4.0 | 74.0\(\pm\)0.0 | 73.3\(\pm\)5.0 | 74.0\(\pm\)6.0 | **77.3\(\pm\)7.6 @ K1.22** |
+| PushT H=10 / goal offset=50 | 11.3\(\pm\)5.0 | 13.3\(\pm\)6.1 | 14.7\(\pm\)6.4 | 15.3\(\pm\)8.1 | 12.7\(\pm\)8.3 | **17.3\(\pm\)7.6 @ K1.02** |
 
 ![Main success comparison](analysis/readme_figures/main_success_vs_lewm.png)
 
@@ -131,6 +187,10 @@ The main readout is deliberately conditional:
   and the learned selector almost always stops at \(K=1\).
 - Cube Double improves over all fixed RefineJEPA depths but remains 0.7 points
   below the original LeWM baseline.
+- In the explicitly long-horizon PushT setting, dynamic \(K\) improves by 6.0
+  points over LeWM and 2.0 points over the best fixed depth while using mean
+  \(K=1.02\). This row changes both planner horizon and goal offset and should
+  not be interpreted as a monotonic comparison with default PushT.
 
 The seed-level variation is substantial, so these results support the current
 method trend rather than a claim of statistical dominance on every task.
@@ -140,9 +200,10 @@ method trend rather than a claim of statistical dominance on every task.
 The displayed dynamic entries are the best observed success/mean-\(K\)
 operating points from a test-time threshold sweep. The selected thresholds are
 \(\eta=0.45\) for Reacher, \(0.70\) for Cube Single, \(0.45\) for Cube Double,
-and \(0.30\) for Cube Triple. Because these thresholds were selected on the
-evaluation sweep rather than a held-out validation set, the table should be
-read as a **post-hoc Pareto envelope**, not as a final unbiased test estimate.
+\(0.30\) for Cube Triple, and \(0.60\) for PushT H=10/goal offset=50. Because these
+thresholds were selected on the evaluation sweep rather than a held-out
+validation set, the table should be read as a **post-hoc Pareto envelope**, not
+as a final unbiased test estimate.
 The final paper protocol should select \(\eta\) on held-out validation episodes
 and evaluate it once on the test set.
 
@@ -173,11 +234,14 @@ often near the first imagined transition, then progressively less later.
 
 ### Qualitative PushT trace
 
-The following is one successful PushT H10/goal50 episode, included as a
+The following is one successful PushT H=10/goal offset=50 episode, included as a
 qualitative trace rather than aggregate benchmark evidence. For
 `global=1474257` at \(\eta=0.30\), mean \(K=1.287\), 21.8% of imagined
 predictions are refined beyond \(K=1\), and the strongest band appears around
-imagined rollout step \(+3\).
+imagined rollout step \(+3\). This visualization intentionally uses a lower
+threshold than the aggregate main-table point (\(\eta=0.60\)) so that the
+locations receiving extra refinement are visible; it is not the quantitative
+operating point reported in the main table.
 
 ![PushT success trace with high-refinement decisions](figures/pusht_success_highk_env6_trace_panel.png)
 
